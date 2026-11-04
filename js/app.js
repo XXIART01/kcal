@@ -1,6 +1,6 @@
 (() => {
   // ---------- constants ----------
-  const VERSION = 21;
+  const VERSION = 22;
   // отладка вёрстки: ?iphone — зоны iPhone 13, ?grid — сетка и размеры блоков
   if (/[?&]iphone/.test(location.search)) document.documentElement.classList.add("sim-iphone");
   if (/[?&]grid/.test(location.search)) addEventListener("load", () => document.head.appendChild(Object.assign(document.createElement("script"), {src: "js/grid.js"})));
@@ -517,14 +517,15 @@
 
   async function loadDay(quiet){
     const d = cur;
-    if (!quiet) $("app").classList.add("loading");
+    // заготовки — только если загрузка заметно долгая; быстрый ответ не мигает серым
+    const slow = quiet ? 0 : setTimeout(() => d === cur && $("app").classList.add("loading"), 250);
     try {
       const r = await Store.read(dayPath(d));
       if (d !== cur) return;
       day = {...blank(d), ...(r?.data || {})};
       setStatus(""); render();
     } catch (e){ fail("Не загрузилось", e); }
-    finally { if (d === cur) $("app").classList.remove("loading"); }
+    finally { clearTimeout(slow); if (d === cur) $("app").classList.remove("loading"); }
     const others = weekDays().filter(x => x !== d && x <= todayIso());
     const docs = await Promise.all(others.map(x => Store.read(dayPath(x)).then(r => r?.data, () => null)));
     if (d !== cur) return;
@@ -695,7 +696,8 @@
   }
 
   // ---------- events ----------
-  function go(d){ weekDocs[cur] = day; cur = d; day = weekDocs[d] ? {...blank(d), ...weekDocs[d]} : blank(d); pendingWater = null; render(); loadDay(); }
+  // день уже загружали — показываем сразу и тихо обновляем в фоне, без серых заготовок
+  function go(d){ weekDocs[cur] = day; cur = d; const known = weekDocs[d]; day = known ? {...blank(d), ...known} : blank(d); pendingWater = null; render(); loadDay(!!known); }
   $("prev").onclick = () => go(addDays(cur,-1));
   $("next").onclick = () => go(addDays(cur,1));
   // смахнуть ленту дней влево/вправо — следующий/предыдущий день
