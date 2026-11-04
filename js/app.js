@@ -1,6 +1,6 @@
 (() => {
   // ---------- constants ----------
-  const VERSION = 17;
+  const VERSION = 18;
   // отладка вёрстки: ?iphone — зоны iPhone 13, ?grid — сетка и размеры блоков
   if (/[?&]iphone/.test(location.search)) document.documentElement.classList.add("sim-iphone");
   if (/[?&]grid/.test(location.search)) addEventListener("load", () => document.head.appendChild(Object.assign(document.createElement("script"), {src: "js/grid.js"})));
@@ -714,6 +714,17 @@
   $("wMinus").onclick = () => bumpWater(-250);
   $("newFood").onclick = () => foodForm(null);
   $("foodQ").oninput = renderFoods;
+  // лента категорий: своя горизонтальная прокрутка — упирается в края без «резинки», вертикальный жест уходит странице
+  (() => { const el = $("foodCats"); let x0 = null, y0 = 0, s0 = 0, horiz = null;
+    el.addEventListener("touchstart", e => { x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; s0 = el.scrollLeft; horiz = null; }, {passive: true});
+    el.addEventListener("touchmove", e => {
+      if (x0 === null) return;
+      const dx = e.touches[0].clientX - x0, dy = e.touches[0].clientY - y0;
+      if (horiz === null && Math.abs(dx) + Math.abs(dy) > 6) horiz = Math.abs(dx) > Math.abs(dy);
+      if (horiz) el.scrollLeft = s0 - dx; // браузер сам ограничит 0…max
+    }, {passive: true});
+    el.addEventListener("touchend", () => { x0 = null; }, {passive: true});
+  })();
   $("foodCats").onclick = e => { const b = e.target.closest("[data-cat]"); if (b){ foodCat = b.dataset.cat; renderFoods(); } };
   $("scanBtn").onclick = () => scanSheet();
   $("foodList").onclick = e => { if (e.target.closest("#starterBtn")) return addStarter(); const b = e.target.closest("[data-food]"); if (b) foodForm(foods.find(f => f.id === b.dataset.food)); };
@@ -771,6 +782,8 @@
     } catch (e){ return fail("Не загрузилось", e); }
     render(); loadDay();
   }
+
+  addEventListener("scroll", () => document.documentElement.classList.toggle("scrolled", scrollY > 4), {passive: true});
 
   // записи с компьютера (Claude) подхватываются при каждом возврате в приложение
   document.addEventListener("visibilitychange", () => {

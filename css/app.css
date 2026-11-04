@@ -544,8 +544,10 @@ body{padding-bottom:calc(var(--sab) + 88px)} /* панель 64 + отступ 1
 
 /* лента категорий в «Продуктах»: только горизонтально. Невидимая зона нажатия чипов (::after)
    выходила за высоту ленты, и её можно было тянуть вверх-вниз за границу */
-.chips.scroll{overflow-y:hidden;padding-top:6px;padding-bottom:6px;margin-top:-6px;margin-bottom:6px;overscroll-behavior-x:contain;touch-action:pan-x}
+.chips.scroll{overflow:hidden;padding-top:6px;padding-bottom:6px;margin-top:-6px;margin-bottom:6px;touch-action:pan-y}
 /* страница не «резинит» за края; контент под статус-баром прикрыт плавным затемнением */
 html,body{overscroll-behavior-y:none}
-body::before{content:"";position:fixed;left:0;right:0;top:0;height:calc(var(--sat) + 8px);z-index:4;pointer-events:none;
-  background:linear-gradient(180deg,rgba(9,9,12,.92),rgba(9,9,12,.6) 70%,transparent)}
+/* затемнение под статус-баром — только когда список уехал под него; в покое фон сверху виден целиком */
+body::before{content:"";position:fixed;left:0;right:0;top:0;height:calc(var(--sat) + 8px);z-index:4;pointer-events:none;opacity:0;transition:opacity .25s;
+  background:linear-gradient(180deg,rgba(9,9,12,.85),rgba(9,9,12,.5) 70%,transparent)}
+html.scrolled body::before{opacity:1}
