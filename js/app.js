@@ -1,6 +1,6 @@
 (() => {
   // ---------- constants ----------
-  const VERSION = 22;
+  const VERSION = 23;
   // отладка вёрстки: ?iphone — зоны iPhone 13, ?grid — сетка и размеры блоков
   if (/[?&]iphone/.test(location.search)) document.documentElement.classList.add("sim-iphone");
   if (/[?&]grid/.test(location.search)) addEventListener("load", () => document.head.appendChild(Object.assign(document.createElement("script"), {src: "js/grid.js"})));
@@ -530,7 +530,7 @@
     const docs = await Promise.all(others.map(x => Store.read(dayPath(x)).then(r => r?.data, () => null)));
     if (d !== cur) return;
     others.forEach((x, i) => { if (docs[i]) weekDocs[x] = docs[i]; });
-    renderWeek();
+    renderWeek(); saveCache();
   }
 
   // Оптимистично меняем экран, пишем на сервер по очереди (каждая правка = коммит).
@@ -542,7 +542,7 @@
       try {
         const saved = await Store.update(dayPath(d), cd => fn(cd || blank(d)), `${d}: ${msg}`);
         if (d === cur && inflight === 1) { day = {...blank(d), ...saved}; render(); }
-        setStatus("");
+        setStatus(""); saveCache();
       } catch (e){ fail("Не сохранилось", e); }
       inflight--;
     });
@@ -558,7 +558,7 @@
     }, 700);
   }
 
-  const saveConf = (path, data, msg) => Store.update(path, () => data, msg).catch(e => fail("Не сохранилось", e));
+  const saveConf = (path, data, msg) => { saveCache(); return Store.update(path, () => data, msg).catch(e => fail("Не сохранилось", e)); };
 
   // ---------- sheets ----------
   function openSheet(html){ stopScan?.(); const sb = $("sheetBody"); sb.innerHTML = html; sb.classList.remove("swap"); sb.offsetWidth; sb.classList.add("swap"); $("scrim").classList.add("on"); $("sheet").classList.add("on"); }
@@ -676,7 +676,7 @@
         <button class="btn ghost" type="button" id="hardUpdate">Обновить приложение</button>
         <div class="hint" style="text-align:center;margin-top:10px">Версия ${VERSION}</div>
       </form>`);
-    $("logout").onclick = () => { closeSheet(); Store.clearToken(); showSetup(); };
+    $("logout").onclick = () => { closeSheet(); Store.clearToken(); localStorage.removeItem(CKEY); showSetup(); };
     // аварийный выход, если иконка на экране «Домой» застряла на старой версии
     $("hardUpdate").onclick = async () => {
       const regs = await navigator.serviceWorker?.getRegistrations?.() || [];
@@ -774,22 +774,39 @@
   }
 
   // ---------- boot ----------
+  // ---------- кэш на телефоне: при открытии показываем последнее сразу, свежее подтягиваем в фоне ----------
+  const CKEY = "kcal_cache";
+  function saveCache(){
+    try {
+      if (day.date) weekDocs[day.date] = day;
+      // держим только дни около текущего, чтобы кэш не рос
+      const keep = Object.fromEntries(Object.entries(weekDocs).filter(([k]) => Math.abs(parseIso(k) - parseIso(cur)) <= 10 * 864e5));
+      localStorage.setItem(CKEY, JSON.stringify({goals, sups, foods, days: keep}));
+    } catch {}
+  }
+  function readCache(){ try { return JSON.parse(localStorage.getItem(CKEY)); } catch { return null; } }
+
   async function boot(){
     if (!Store.hasToken()) return showSetup();
     $("setup").hidden = true; $("app").hidden = false; $("tabbar").hidden = false;
-    $("app").classList.add("loading"); render();
+    const c = readCache();
+    if (c){
+      goals = {...DEFAULT_GOALS, ...c.goals}; sups = c.sups || sups; foods = c.foods || foods; weekDocs = c.days || {};
+      if (weekDocs[cur]) day = {...blank(cur), ...weekDocs[cur]};
+      render(); // мгновенно, без серых заготовок
+    } else { $("app").classList.add("loading"); render(); } // самый первый запуск
+    loadDay(!!c);
     try {
-      let s = await Store.read("settings.json");
+      // настройки, добавки и продукты — параллельно, а не по очереди
+      const [s, su, fo] = await Promise.all(["settings.json", "supplements.json", "foods.json"].map(p => Store.read(p)));
       if (!s) await Store.update("settings.json", () => DEFAULT_GOALS, "начальные цели");
       else goals = {...DEFAULT_GOALS, ...s.data, micro: {...DEFAULT_GOALS.micro, ...(s.data.micro || {})}};
-      let su = await Store.read("supplements.json");
       if (!su) await Store.update("supplements.json", () => sups, "добавки");
       else sups = su.data;
-      const fo = await Store.read("foods.json");
       if (fo) foods = fo.data;
       else { foods = [...STARTER]; await Store.update("foods.json", () => foods, "базовые продукты"); }
     } catch (e){ return fail("Не загрузилось", e); }
-    render(); loadDay();
+    render(); saveCache();
   }
 
   addEventListener("scroll", () => document.documentElement.classList.toggle("scrolled", scrollY > 4), {passive: true});
