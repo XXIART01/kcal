@@ -1,6 +1,6 @@
 (() => {
   // ---------- constants ----------
-  const VERSION = 23;
+  const VERSION = 24;
   // отладка вёрстки: ?iphone — зоны iPhone 13, ?grid — сетка и размеры блоков
   if (/[?&]iphone/.test(location.search)) document.documentElement.classList.add("sim-iphone");
   if (/[?&]grid/.test(location.search)) addEventListener("load", () => document.head.appendChild(Object.assign(document.createElement("script"), {src: "js/grid.js"})));
@@ -492,7 +492,7 @@
   // неделя пн–вс, в которую попадает cur; кольцо = доля нормы калорий
   // лента дней: выбранный всегда в центре, по 3 дня слева и справа
   const weekDays = () => Array.from({length:7}, (_, i) => addDays(cur, i - 3));
-  let stripAt = null;
+  let stripAt = null, stripFrom = null;
   function renderWeek(){
     const t = todayIso(), strip = $("week");
     const shift = stripAt && stripAt !== cur ? Math.sign(parseIso(cur) - parseIso(stripAt)) : 0;
@@ -506,7 +506,7 @@
     }).join("");
     // сдвиг как у слайдера: лента приезжает с той стороны, откуда пришёл день
     if (shift){
-      strip.style.transition = "none"; strip.style.transform = `translateX(${shift * strip.offsetWidth / 7}px)`;
+      strip.style.transition = "none"; strip.style.transform = `translateX(${stripFrom ?? shift * strip.offsetWidth / 7}px)`; stripFrom = null;
       strip.offsetWidth; // применить стартовое положение до анимации
       strip.style.transition = ""; strip.style.transform = "";
     }
@@ -579,9 +579,11 @@
   })();
   (() => {
     let y0 = null, dy = 0; const ptr = $("ptr");
-    addEventListener("touchstart", e => { y0 = scrollY <= 0 && !$("sheet").classList.contains("on") && !$("app").hidden ? e.touches[0].clientY : null; dy = 0; }, {passive: true});
+    let x0 = 0;
+    addEventListener("touchstart", e => { y0 = scrollY <= 0 && !$("sheet").classList.contains("on") && !$("app").hidden && !e.target.closest(".days,.chips") ? e.touches[0].clientY : null; x0 = e.touches[0].clientX; dy = 0; }, {passive: true});
     addEventListener("touchmove", e => {
       if (y0 === null) return;
+      if (Math.abs(e.touches[0].clientX - x0) > Math.abs(e.touches[0].clientY - y0)){ dy = 0; ptr.style.opacity = 0; return; } // боковое движение — не обновление
       dy = Math.max(0, e.touches[0].clientY - y0);
       ptr.style.opacity = Math.min(1, dy / 80); ptr.style.transform = `translate(-50%, ${Math.min(dy, 90) * .5}px) rotate(${dy * 3}deg)`;
     }, {passive: true});
@@ -701,10 +703,13 @@
   $("prev").onclick = () => go(addDays(cur,-1));
   $("next").onclick = () => go(addDays(cur,1));
   // смахнуть ленту дней влево/вправо — следующий/предыдущий день
-  (() => { let x0 = null;
-    $("week").addEventListener("touchstart", e => { x0 = e.touches[0].clientX; }, {passive: true});
-    $("week").addEventListener("touchend", e => { if (x0 === null) return; const dx = e.changedTouches[0].clientX - x0; x0 = null;
-      if (Math.abs(dx) > 40) go(addDays(cur, dx < 0 ? 1 : -1)); });
+  // лента едет за пальцем и встаёт на ближайший день
+  (() => { const el = $("week"); let x0 = null, dx = 0;
+    el.addEventListener("touchstart", e => { x0 = e.touches[0].clientX; dx = 0; el.style.transition = "none"; }, {passive: true});
+    el.addEventListener("touchmove", e => { if (x0 === null) return; dx = e.touches[0].clientX - x0; el.style.transform = `translateX(${dx}px)`; }, {passive: true});
+    el.addEventListener("touchend", () => { if (x0 === null) return; x0 = null; el.style.transition = "";
+      const slot = el.offsetWidth / 7, steps = Math.max(-3, Math.min(3, Math.round(-dx / slot)));
+      if (steps){ stripFrom = dx + steps * slot; go(addDays(cur, steps)); } else el.style.transform = ""; });
   })();
   $("dateLbl").onclick = () => go(todayIso());
   $("wForm").onsubmit = e => {
