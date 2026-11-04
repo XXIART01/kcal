@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Ккал">
+<meta name="theme-color" content="#f6f5f2" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#111110" media="(prefers-color-scheme: dark)">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="icon" href="icons/icon-192.png">
+<title>Ккал — счётчик</title>
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<div class="wrap" id="app" hidden>
+  <div class="top">
+    <button class="icon-btn" id="settingsBtn" aria-label="Цели">⚙︎</button>
+    <div class="nav">
+      <button class="icon-btn" id="prev" aria-label="Предыдущий день">‹</button>
+      <button class="date" id="dateLbl"></button>
+      <button class="icon-btn" id="next" aria-label="Следующий день">›</button>
+    </div>
+    <span style="width:36px"></span>
+  </div>
+
+  <div class="card">
+    <div class="hero">
+      <div class="ring">
+        <svg width="132" height="132" viewBox="0 0 132 132">
+          <circle cx="66" cy="66" r="56" fill="none" stroke="var(--soft)" stroke-width="11"/>
+          <circle id="ringArc" cx="66" cy="66" r="56" fill="none" stroke="var(--kcal)" stroke-width="11" stroke-linecap="round" stroke-dasharray="351.86" stroke-dashoffset="351.86" style="transition:stroke-dashoffset .5s"/>
+        </svg>
+        <div class="mid"><div><b id="kLeft">—</b><span id="kLeftLbl">осталось</span></div></div>
+      </div>
+      <div class="macros" id="macros"></div>
+    </div>
+    <div class="eaten"><span id="eatenTxt"></span><span id="goalTxt"></span></div>
+  </div>
+
+  <div class="card">
+    <h3>Вода</h3>
+    <div class="water-row">
+      <div class="glasses" id="glasses"></div>
+      <div class="w-num" id="wNum"></div>
+    </div>
+    <div class="w-btns">
+      <button class="pill" id="wMinus">−250</button>
+      <button class="pill w" id="w250">+250 мл</button>
+      <button class="pill w" id="w500">+500 мл</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Добавки <span class="toggle" id="supInfo"></span></h3>
+    <div id="sups"></div>
+  </div>
+
+  <div class="card">
+    <h3>Еда <span class="toggle" id="itemsCount"></span></h3>
+    <div id="meals"></div>
+  </div>
+
+  <div class="card">
+    <h3>Микроэлементы <button class="toggle" id="microToggle">все</button></h3>
+    <div class="micro" id="micro"></div>
+  </div>
+
+  <div class="card">
+    <h3>Неделя</h3>
+    <div class="week" id="week"></div>
+    <div class="wk-sum" id="wkSum"></div>
+  </div>
+
+  <div class="status" id="status"></div>
+</div>
+
+<div class="wrap" id="setup" hidden>
+  <div class="card" style="margin-top:30px">
+    <h2 style="margin:0 0 10px">Первый запуск</h2>
+    <p class="hint">Вставь токен GitHub (fine-grained, только репозиторий kcal-data, Contents: Read and write). Он хранится только в этом браузере.</p>
+    <form id="tokForm">
+      <label class="fld"><span>Токен</span><input id="tokInput" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" required></label>
+      <button class="btn" type="submit">Войти</button>
+      <div class="status err" id="tokErr"></div>
+    </form>
+  </div>
+</div>
+
+<button class="fab" id="addBtn" hidden>＋ Добавить</button>
+
+<div class="scrim" id="scrim"></div>
+<div class="sheet" id="sheet"><div class="grab"></div><div id="sheetBody"></div></div>
+
+<script src="js/api.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
