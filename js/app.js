@@ -361,6 +361,10 @@
     if (!document.hidden && Store.hasToken() && !inflight && pendingWater == null) loadDay();
   });
 
-  if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js");
+  if ("serviceWorker" in navigator && location.protocol === "https:"){
+    // пришла новая версия — перезагрузить один раз (при первой установке контроллера ещё нет)
+    if (navigator.serviceWorker.controller) navigator.serviceWorker.addEventListener("controllerchange", () => location.reload(), {once: true});
+    navigator.serviceWorker.register("sw.js", {updateViaCache: "none"});
+  }
   boot();
 })();
