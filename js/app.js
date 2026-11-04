@@ -1,6 +1,10 @@
 (() => {
   // ---------- constants ----------
-  const VERSION = 9; // поднимать вместе с CACHE в sw.js
+  const VERSION = 16;
+  // отладка вёрстки: ?iphone — зоны iPhone 13, ?grid — сетка и размеры блоков
+  if (/[?&]iphone/.test(location.search)) document.documentElement.classList.add("sim-iphone");
+  if (/[?&]grid/.test(location.search)) addEventListener("load", () => document.head.appendChild(Object.assign(document.createElement("script"), {src: "js/grid.js"})));
+  const ICON_PLUS = `<svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>`, ICON_ARROW = `<svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>`; // поднимать вместе с CACHE в sw.js
   const MEALS = ["Завтрак","Обед","Ужин","Перекус"];
   const MICRO = [
     {k:"fib", n:"Клетчатка", u:"г", def:30},
@@ -80,17 +84,31 @@
   function render(){
     renderDate();
     const items = day.items || [], t = totals(items), g = goals;
-    const arc = $("ringArc");
-    arc.style.strokeDashoffset = String(251.33 * (1 - Math.min(t.kcal / Math.max(g.kcal,1), 1)));
-    arc.style.stroke = t.kcal > g.kcal ? "var(--warn)" : "var(--kcal)";
+    // кольцо: прогресс — мягкий зелёный; сверх нормы — белый хвост (как у полос БЖУ: белое = «сверх», без тревоги)
+    const C = 251.33, arc = $("ringArc"), over = $("ringOver");
+    if (t.kcal <= g.kcal){
+      arc.style.strokeDasharray = `${C * t.kcal / Math.max(g.kcal,1)} ${C}`;
+      arc.style.stroke = "var(--ring)";
+      over.style.strokeDasharray = `0 ${C}`;
+    } else {
+      const gl = C * g.kcal / t.kcal;
+      arc.style.strokeDasharray = `${gl} ${C}`; arc.style.stroke = "var(--ring)";
+      const gap = 7; // скруглённые концы (радиус 4,5) не налезают друг на друга
+      over.style.strokeDasharray = `0 ${gl + gap} ${Math.max(0, C - gl - 2 * gap)} ${C}`; // хвост — сразу после нормы
+    }
     const left = g.kcal - t.kcal;
     $("kLeft").textContent = fmt(Math.abs(left));
     $("kLeftLbl").textContent = left >= 0 ? "Осталось, ккал" : "Сверх нормы, ккал";
     $("eatenTxt").textContent = `${fmt(t.kcal)} из ${fmt(g.kcal)} ккал`;
     $("kPct").textContent = Math.round(t.kcal / Math.max(g.kcal,1) * 100) + "%";
+    $("ringBox").setAttribute("aria-label", `Съедено ${fmt(t.kcal)} из ${fmt(g.kcal)} ккал, ${left >= 0 ? "осталось " + fmt(left) : "сверх нормы " + fmt(-left)}`);
+    // полоса: до нормы — цвет нутриента; сверх нормы — белый хвост (без тревожного красного)
     $("macros").innerHTML = [["Белки","p","--p"],["Углеводы","c","--c"],["Жиры","f","--f"]].map(([n,k,col]) => {
-      const pct = Math.min(100, t[k] / Math.max(g[k],1) * 100);
-      return `<div class="tile"><div class="cap">${n}</div><b>${fmt(t[k])}<small> / ${fmt(g[k])} г</small></b><div class="bar"><div style="width:${pct}%;background:var(${t[k] > g[k] * 1.05 ? "--warn" : col})"></div></div></div>`;
+      const v = t[k], gg = Math.max(g[k], 1);
+      const fill = v > gg
+        ? `<div style="width:${gg / v * 100}%;background:var(${col})"></div><div class="ov" style="width:${(v - gg) / v * 100}%"></div>`
+        : `<div style="width:${v / gg * 100}%;background:var(${col})"></div>`;
+      return `<div class="tile" role="img" aria-label="${n}: ${fmt(v)} из ${fmt(g[k])} грамм${v > gg ? ", сверх нормы " + fmt(v - gg) : ""}"><div class="cap" aria-hidden="true">${n}</div><b>${fmt(v)}</b><small class="goal">из ${fmt(g[k])} г${v > gg ? ` <em>+${fmt(v - gg)}</em>` : ""}</small><div class="bar">${fill}</div></div>`;
     }).join("");
 
     const water = pendingWater ?? num(day.water);
@@ -101,7 +119,7 @@
     $("mealSum").innerHTML = MEALS.map(m => {
       const list = items.filter(it => (MEALS.includes(it.meal) ? it.meal : "Перекус") === m);
       const sum = list.reduce((s, it) => s + num(it.kcal), 0);
-      return `<div class="ms" data-meal="${m}"><div class="nm">${m}<small>${list.length ? esc(list.map(it => it.name).join(", ")) : "—"}</small></div><span class="kc">${list.length ? fmt(sum) : ""}</span><button class="round sm" data-add="${m}" aria-label="Добавить в ${m}">+</button></div>`;
+      return `<div class="ms" data-meal="${m}"><div class="nm">${m}${list.length ? `<small>${esc(list.map(it => it.name).join(", "))}</small>` : ""}</div><span class="kc">${list.length ? fmt(sum) : ""}</span><button class="round sm" data-add="${m}" aria-label="Добавить в ${m}">${ICON_PLUS}</button></div>`;
     }).join("");
     renderFoods();
     renderWeek();
@@ -299,10 +317,11 @@
       <div id="ares"></div>
       <button class="btn ghost" id="manual">Ввести вручную</button>`);
     const draw = st => {
+      if (!$("aq")) return; // окно уже закрыли, а ответ базы пришёл позже
       const q = $("aq").value.trim();
       const mine = foods.filter(f => !q || match(f, q)).slice(0, q ? 30 : 8);
       let h = "";
-      if (!q && rec.length) h += `<div class="cap">Недавние — нажми, чтобы повторить</div><div class="list">${rec.map((r, i) => `<button class="item" data-rec="${i}"><div class="nm"><div>${esc(r.name)}</div><small>${r.g ? fmt(r.g) + " г · " : ""}Б ${fmt(r.p)} · Ж ${fmt(r.f)} · У ${fmt(r.c)}</small></div><div class="kc">${fmt(r.kcal)}</div><span class="plus">+</span></button>`).join("")}</div>`;
+      if (!q && rec.length) h += `<div class="cap">Недавние — нажми, чтобы повторить</div><div class="list">${rec.map((r, i) => `<button class="item" data-rec="${i}"><div class="nm"><div>${esc(r.name)}</div><small>${r.g ? fmt(r.g) + " г · " : ""}Б ${fmt(r.p)} · Ж ${fmt(r.f)} · У ${fmt(r.c)}</small></div><div class="kc">${fmt(r.kcal)}</div><span class="plus">${ICON_PLUS}</span></button>`).join("")}</div>`;
       if (mine.length) h += `<div class="cap">Мои продукты</div><div class="list">${mine.map(f => foodRow(f, `data-my="${esc(f.id)}"`)).join("")}</div>`;
       if (q.length >= 2) h += `<div class="cap">База Open Food Facts</div>` + (st === "load" ? `<div class="empty">Ищу…</div>`
         : st === "err" ? `<div class="empty">База не ответила. Попробуй ещё раз или введи вручную.</div>`
@@ -376,7 +395,7 @@
     openSheet(`<h2>Штрихкод</h2>
       <div class="scan"><video id="sv" playsinline muted></video><div class="scan-frame"></div></div>
       <div class="hint" id="sst">Включаю камеру…</div>
-      <form id="scode" class="search-row"><input class="search" name="code" inputmode="numeric" pattern="[0-9]{6,14}" placeholder="или введи цифры под штрихкодом" autocomplete="off"><button class="round add" aria-label="Найти">→</button></form>`);
+      <form id="scode" class="search-row"><input class="search" name="code" inputmode="numeric" pattern="[0-9]{6,14}" placeholder="или введи цифры под штрихкодом" autocomplete="off"><button class="round add" aria-label="Найти">${ICON_ARROW}</button></form>`);
     let alive = true, stream = null, timer = null;
     stopScan = () => { alive = false; clearTimeout(timer); stream?.getTracks().forEach(t => t.stop()); stopScan = null; };
     const st = t => { if ($("sst")) $("sst").textContent = t; };
@@ -417,10 +436,45 @@
   function mealSheet(m){
     const list = (day.items || []).filter(it => (MEALS.includes(it.meal) ? it.meal : "Перекус") === m).sort((a,b) => String(a.time||"").localeCompare(String(b.time||"")));
     openSheet(`<h2>${m}</h2>
-      <div id="mlist">${list.length ? list.map(it => `<button class="item" data-id="${esc(it.id)}"><div class="nm"><div>${esc(it.name || "Без названия")}</div><small>${it.g?fmt(it.g)+" г · ":""}Б ${fmt(it.p)} · Ж ${fmt(it.f)} · У ${fmt(it.c)}${it.time?" · "+esc(it.time):""}</small></div><div class="kc">${fmt(it.kcal)}</div></button>`).join("") : `<div class="empty">Пока пусто</div>`}</div>
+      <div id="mlist">${list.length ? list.map(it => `<div class="swipe"><button class="del" data-del="${esc(it.id)}">Удалить</button><button class="item" data-id="${esc(it.id)}"><div class="nm"><div>${esc(it.name || "Без названия")}</div><small>${it.g?fmt(it.g)+" г · ":""}Б ${fmt(it.p)} · Ж ${fmt(it.f)} · У ${fmt(it.c)}${it.time?" · "+esc(it.time):""}</small></div><div class="kc">${fmt(it.kcal)}</div></button></div>`).join("") : `<div class="empty">Пока пусто</div>`}</div>
+      <div class="hint">Смахни блюдо влево, чтобы удалить</div>
       <button class="btn" id="madd">Добавить</button>`);
-    $("mlist").onclick = e => { const b = e.target.closest(".item"); if (b) itemDetails(b.dataset.id); };
+    $("mlist").onclick = e => {
+      const del = e.target.closest("[data-del]");
+      if (del){
+        const it = day.items.find(x => x.id === del.dataset.del);
+        mutate(d => ({...d, items: d.items.filter(x => x.id !== del.dataset.del)}), "удалено: " + (it?.name || ""));
+        return mealSheet(m);
+      }
+      const row = e.target.closest(".swipe");
+      if (row?.classList.contains("open")) return row.classList.remove("open"); // тап по открытой строке — закрыть
+      const b = e.target.closest(".item"); if (b) itemDetails(b.dataset.id);
+    };
+    swipeRows($("mlist"));
     $("madd").onclick = () => addSheet(m);
+  }
+
+  // смахивание строк влево открывает кнопку «Удалить»
+  function swipeRows(root){
+    let row = null, x0 = 0, y0 = 0, dx = 0, horiz = null;
+    root.addEventListener("touchstart", e => {
+      row = e.target.closest(".swipe"); if (!row) return;
+      root.querySelectorAll(".swipe.open").forEach(r => r !== row && r.classList.remove("open"));
+      x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; dx = 0; horiz = null;
+    }, {passive: true});
+    root.addEventListener("touchmove", e => {
+      if (!row) return;
+      const mx = e.touches[0].clientX - x0, my = e.touches[0].clientY - y0;
+      if (horiz === null && Math.abs(mx) + Math.abs(my) > 8) horiz = Math.abs(mx) > Math.abs(my);
+      if (!horiz) return;
+      dx = Math.max(-96, Math.min(0, mx + (row.classList.contains("open") ? -96 : 0)));
+      row.querySelector(".item").style.transform = `translateX(${dx}px)`; row.classList.add("drag");
+    }, {passive: true});
+    root.addEventListener("touchend", () => {
+      if (!row) return;
+      if (horiz){ row.classList.toggle("open", dx < -48); row.querySelector(".item").style.transform = ""; row.classList.remove("drag"); }
+      row = null;
+    });
   }
 
   function renderSups(){
@@ -436,34 +490,45 @@
   }
 
   // неделя пн–вс, в которую попадает cur; кольцо = доля нормы калорий
-  const weekDays = () => { const wd = (parseIso(cur).getDay() + 6) % 7; return Array.from({length:7}, (_, i) => addDays(cur, i - wd)); };
+  // лента дней: выбранный всегда в центре, по 3 дня слева и справа
+  const weekDays = () => Array.from({length:7}, (_, i) => addDays(cur, i - 3));
+  let stripAt = null;
   function renderWeek(){
-    const t = todayIso();
-    $("week").innerHTML = weekDays().map(d => {
+    const t = todayIso(), strip = $("week");
+    const shift = stripAt && stripAt !== cur ? Math.sign(parseIso(cur) - parseIso(stripAt)) : 0;
+    stripAt = cur;
+    strip.innerHTML = weekDays().map((d, i) => {
       const k = totals(d === cur ? day.items : weekDocs[d]?.items).kcal;
       const pct = Math.min(k / Math.max(goals.kcal,1), 1);
-      const col = k > goals.kcal * 1.05 ? "var(--warn)" : "var(--ink)";
+      const col = k > goals.kcal * 1.05 ? "rgba(255,69,58,.55)" : "rgba(255,255,255,.42)"; // прошлые дни приглушены, акцент — на выбранном
       const wd = parseIso(d).toLocaleDateString("ru-RU", {weekday:"short"});
-      return `<button class="day${d===cur?" sel":""}${d===t?" today":""}" data-d="${d}" aria-label="${esc(ruDate(d))}"><svg width="40" height="40" viewBox="0 0 40 40"><circle cx="20" cy="20" r="18" fill="none" stroke="var(--soft)" stroke-width="2.5"/><circle cx="20" cy="20" r="18" fill="none" stroke="${col}" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="113.1" stroke-dashoffset="${113.1 * (1 - pct)}"/></svg>${esc(wd)}</button>`;
+      return `<button class="day d${Math.abs(i - 3)}${d===cur?" sel":""}${d===t?" today":""}" data-d="${d}" aria-label="${esc(ruDate(d))}"${d===cur?' aria-current="date"':""}><svg viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="18" fill="none" stroke="var(--soft)" stroke-width="2.5"/><circle cx="20" cy="20" r="18" fill="none" stroke="${col}" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="113.1" stroke-dashoffset="${113.1 * (1 - pct)}"/></svg>${esc(wd)}</button>`;
     }).join("");
+    // сдвиг как у слайдера: лента приезжает с той стороны, откуда пришёл день
+    if (shift){
+      strip.style.transition = "none"; strip.style.transform = `translateX(${shift * strip.offsetWidth / 7}px)`;
+      strip.offsetWidth; // применить стартовое положение до анимации
+      strip.style.transition = ""; strip.style.transform = "";
+    }
   }
 
   // ---------- data ----------
   const dayPath = d => `days/${d}.json`;
 
-  async function loadDay(){
+  async function loadDay(quiet){
     const d = cur;
-    setStatus("Загрузка…");
+    if (!quiet) $("app").classList.add("loading");
     try {
       const r = await Store.read(dayPath(d));
       if (d !== cur) return;
       day = {...blank(d), ...(r?.data || {})};
       setStatus(""); render();
     } catch (e){ fail("Не загрузилось", e); }
+    finally { if (d === cur) $("app").classList.remove("loading"); }
     const others = weekDays().filter(x => x !== d && x <= todayIso());
     const docs = await Promise.all(others.map(x => Store.read(dayPath(x)).then(r => r?.data, () => null)));
     if (d !== cur) return;
-    weekDocs = {}; others.forEach((x, i) => { if (docs[i]) weekDocs[x] = docs[i]; });
+    others.forEach((x, i) => { if (docs[i]) weekDocs[x] = docs[i]; });
     renderWeek();
   }
 
@@ -496,7 +561,36 @@
 
   // ---------- sheets ----------
   function openSheet(html){ stopScan?.(); $("sheetBody").innerHTML = html; $("scrim").classList.add("on"); $("sheet").classList.add("on"); }
-  function closeSheet(){ stopScan?.(); $("scrim").classList.remove("on"); $("sheet").classList.remove("on"); }
+  function closeSheet(){ stopScan?.(); $("scrim").classList.remove("on"); $("sheet").classList.remove("on"); $("sheet").style.transform = ""; }
+  (() => {
+    const sh = $("sheet"); let y0 = null, dy = 0;
+    sh.addEventListener("touchstart", e => { y0 = sh.scrollTop <= 0 && !e.target.closest(".swipe") ? e.touches[0].clientY : null; dy = 0; }, {passive: true});
+    sh.addEventListener("touchmove", e => {
+      if (y0 === null) return;
+      dy = e.touches[0].clientY - y0;
+      if (dy > 0){ sh.style.transition = "none"; sh.style.transform = `translateY(${dy}px)`; }
+    }, {passive: true});
+    sh.addEventListener("touchend", () => {
+      if (y0 === null) return;
+      sh.style.transition = ""; y0 = null;
+      if (dy > 110) closeSheet(); else sh.style.transform = "";
+    });
+  })();
+  (() => {
+    let y0 = null, dy = 0; const ptr = $("ptr");
+    addEventListener("touchstart", e => { y0 = scrollY <= 0 && !$("sheet").classList.contains("on") && !$("app").hidden ? e.touches[0].clientY : null; dy = 0; }, {passive: true});
+    addEventListener("touchmove", e => {
+      if (y0 === null) return;
+      dy = Math.max(0, e.touches[0].clientY - y0);
+      ptr.style.opacity = Math.min(1, dy / 80); ptr.style.transform = `translate(-50%, ${Math.min(dy, 90) * .5}px) rotate(${dy * 3}deg)`;
+    }, {passive: true});
+    addEventListener("touchend", async () => {
+      if (y0 === null) return;
+      y0 = null;
+      if (dy > 80 && !inflight){ ptr.classList.add("spin"); await loadDay(true); }
+      ptr.classList.remove("spin"); ptr.style.opacity = 0; ptr.style.transform = "";
+    });
+  })();
   $("scrim").onclick = closeSheet;
 
   const nowTime = () => { const d = new Date(); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
@@ -601,9 +695,15 @@
   }
 
   // ---------- events ----------
-  function go(d){ cur = d; day = blank(d); weekDocs = {}; pendingWater = null; render(); loadDay(); }
-  $("prev").onclick = () => go(addDays(cur,-7));
-  $("next").onclick = () => go(addDays(cur,7));
+  function go(d){ weekDocs[cur] = day; cur = d; day = weekDocs[d] ? {...blank(d), ...weekDocs[d]} : blank(d); pendingWater = null; render(); loadDay(); }
+  $("prev").onclick = () => go(addDays(cur,-1));
+  $("next").onclick = () => go(addDays(cur,1));
+  // смахнуть ленту дней влево/вправо — следующий/предыдущий день
+  (() => { let x0 = null;
+    $("week").addEventListener("touchstart", e => { x0 = e.touches[0].clientX; }, {passive: true});
+    $("week").addEventListener("touchend", e => { if (x0 === null) return; const dx = e.changedTouches[0].clientX - x0; x0 = null;
+      if (Math.abs(dx) > 40) go(addDays(cur, dx < 0 ? 1 : -1)); });
+  })();
   $("dateLbl").onclick = () => go(todayIso());
   $("wForm").onsubmit = e => {
     e.preventDefault();
@@ -621,12 +721,16 @@
     const a = e.target.closest("[data-add]"); if (a) return addSheet(a.dataset.add);
     const r = e.target.closest(".ms"); if (r) mealSheet(r.dataset.meal);
   };
+  // подложка выбранной вкладки переезжает к нажатой (сама анимация — в CSS)
+  const movePill = b => { const p = $("tabPill"); p.style.width = b.offsetWidth + "px"; p.style.transform = `translateX(${b.offsetLeft}px)`; };
   $("tabbar").onclick = e => {
-    const b = e.target.closest("button"); if (!b) return;
+    const b = e.target.closest("button"); if (!b || b.classList.contains("on")) return;
     document.querySelectorAll("#tabbar button").forEach(x => x.classList.toggle("on", x === b));
+    movePill(b);
     document.querySelectorAll("section[data-tab]").forEach(x => x.hidden = x.dataset.tab !== b.dataset.tab);
     scrollTo(0, 0);
   };
+  new ResizeObserver(() => { const b = document.querySelector("#tabbar button.on"); if (b) movePill(b); }).observe($("tabbar"));
   $("settingsBtn").onclick = settingsSheet;
   $("week").onclick = e => { const b = e.target.closest(".day"); if (b && b.dataset.d !== cur) go(b.dataset.d); };
   $("sups").onclick = e => {
@@ -653,7 +757,7 @@
   async function boot(){
     if (!Store.hasToken()) return showSetup();
     $("setup").hidden = true; $("app").hidden = false; $("tabbar").hidden = false;
-    render(); setStatus("Загрузка…");
+    $("app").classList.add("loading"); render();
     try {
       let s = await Store.read("settings.json");
       if (!s) await Store.update("settings.json", () => DEFAULT_GOALS, "начальные цели");
@@ -670,7 +774,7 @@
 
   // записи с компьютера (Claude) подхватываются при каждом возврате в приложение
   document.addEventListener("visibilitychange", () => {
-    if (!document.hidden && Store.hasToken() && !inflight && pendingWater == null) loadDay();
+    if (!document.hidden && Store.hasToken() && !inflight && pendingWater == null) loadDay(true);
   });
 
   if ("serviceWorker" in navigator && location.protocol === "https:"){

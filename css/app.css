@@ -1,19 +1,23 @@
+/* безопасные зоны iPhone; в режиме ?iphone подменяются на iPhone 13 (47 сверху, 34 снизу) */
+:root{--sat:env(safe-area-inset-top,0px);--sab:env(safe-area-inset-bottom,0px)}
+html.sim-iphone{--sat:47px;--sab:34px}
 :root{
-  --bg:#000;--card:#1c1c1e;--ink:#fff;--mute:#8e8e93;--line:#2c2c2e;--soft:#2c2c2e;
+  --bg:#0b0b0e;--card:#17171b;--ink:#fff;--mute:#8e8e96;--line:rgba(255,255,255,.07);--soft:rgba(255,255,255,.08);
   --kcal:#fff;--p:#4ea1ff;--f:#ff5a5f;--c:#ffc53d;--w:#5ac8fa;--ok:#30d158;--warn:#ff453a;
   --r:22px;color-scheme:dark;
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 [hidden]{display:none!important}
 html,body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.35 -apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,sans-serif}
-body{padding:calc(env(safe-area-inset-top) + 8px) 14px calc(env(safe-area-inset-bottom) + 100px)}
+body{padding:calc(var(--sat) + 8px) 14px calc(var(--sab) + 100px)}
 .wrap{max-width:460px;margin:0 auto}
 button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;padding:0}
 .top{display:flex;align-items:center;justify-content:space-between;margin:4px 2px 10px}
 .title{text-align:left;font-size:28px;font-weight:750;letter-spacing:-.02em;line-height:1.1}
 .title small{display:block;font-size:14px;font-weight:400;color:var(--mute);letter-spacing:0;margin-top:2px}
-.icon-btn{width:40px;height:40px;border-radius:50%;display:grid;place-items:center;color:var(--mute);font-size:20px;background:var(--card)}
-.icon-btn.sm{width:24px;height:44px;background:none;font-size:22px}
+.icon-btn{width:40px;height:40px;border-radius:50%;display:grid;place-items:center;color:var(--ink);position:relative}
+.icon-btn.sm{width:24px;height:44px;color:var(--mute)}
+.icon-btn.sm::before{display:none}
 .icon-btn:active{opacity:.6}
 .days{display:flex;align-items:center;gap:2px;margin-bottom:10px}
 .days-row{flex:1;display:flex;justify-content:space-between}
@@ -55,7 +59,7 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;paddin
 .sup .nm{flex:1;min-width:0;font-size:14px}
 .sup .nm small{display:block;color:var(--mute);font-size:12px}
 .dots{display:flex;gap:6px}
-.dot{width:28px;height:28px;border-radius:50%;border:2px solid #48484a;display:grid;place-items:center;color:var(--bg);font-size:14px;line-height:1}
+.dot{width:28px;height:28px;border-radius:50%;border:2px solid rgba(150,175,255,.28);display:grid;place-items:center;color:var(--bg);font-size:14px;line-height:1}
 .dot.on{background:var(--ok);border-color:var(--ok)}
 .sec{display:flex;justify-content:space-between;align-items:baseline;font-size:20px;font-weight:700;margin:20px 4px 10px}
 .sec .round{margin-left:10px}
@@ -81,7 +85,7 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;paddin
 .status.err{color:var(--warn)}
 .scrim{position:fixed;inset:0;background:rgba(0,0,0,.35);opacity:0;pointer-events:none;transition:opacity .2s;z-index:10}
 .scrim.on{opacity:1;pointer-events:auto}
-.sheet{position:fixed;left:0;right:0;bottom:0;max-height:88vh;overflow:auto;background:var(--card);border-radius:22px 22px 0 0;padding:10px 18px calc(env(safe-area-inset-bottom) + 18px);transform:translateY(105%);transition:transform .25s ease,visibility .25s;visibility:hidden;z-index:11;max-width:520px;margin:0 auto}
+.sheet{position:fixed;left:0;right:0;bottom:0;max-height:88vh;overflow:auto;background:var(--card);border-radius:22px 22px 0 0;padding:10px 18px calc(var(--sab) + 18px);transform:translateY(105%);transition:transform .25s ease,visibility .25s;visibility:hidden;z-index:11;max-width:520px;margin:0 auto}
 .sheet.on{transform:none;visibility:visible}
 .grab{width:38px;height:5px;border-radius:3px;background:var(--line);margin:0 auto 12px}
 .sheet h2{font-size:19px;margin:0 0 14px}
@@ -103,7 +107,7 @@ summary{font-size:14px;color:var(--mute);cursor:pointer;padding:6px 0}
 .kv:first-child{border-top:0}
 .kv i{font-style:normal;color:var(--mute)}
 .hint{font-size:12px;color:var(--mute);margin:4px 0 12px}
-.tabbar{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom) + 12px);display:flex;gap:4px;padding:6px;border-radius:32px;z-index:5;
+.tabbar{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(var(--sab) + 12px);display:flex;gap:4px;padding:6px;border-radius:32px;z-index:5;
   background:rgba(44,44,46,.55);-webkit-backdrop-filter:blur(22px) saturate(180%);backdrop-filter:blur(22px) saturate(180%);border:1px solid rgba(255,255,255,.08);box-shadow:0 8px 30px rgba(0,0,0,.5)}
 .tabbar button{width:84px;height:52px;border-radius:26px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:11px;color:var(--mute)}
 .tabbar button.on{background:rgba(255,255,255,.12);color:var(--ink)}
@@ -144,3 +148,396 @@ summary{font-size:14px;color:var(--mute);cursor:pointer;padding:6px 0}
 .scan video{width:100%;height:100%;object-fit:cover;display:block}
 .scan-frame{position:absolute;left:12%;right:12%;top:30%;bottom:30%;border:2px solid rgba(255,255,255,.85);border-radius:14px;box-shadow:0 0 0 999px rgba(0,0,0,.35)}
 #starterBtn{margin:0 0 10px}
+
+/* ---------- иконки: всегда по центру кнопки ---------- */
+.ico{display:block;width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.round{display:grid;place-items:center;padding:0}
+.round .ico{width:20px;height:20px;stroke-width:2.2}
+.round.sm .ico{width:16px;height:16px}
+.item .plus .ico{width:16px;height:16px;stroke-width:2.2}
+.icon-btn.sm .ico{width:20px;height:20px;stroke-width:2.2}
+
+/* ---------- стекло: полупрозрачный фон + обводка с градиентом (светлые левый-верх и правый-низ) ---------- */
+:root{--glass:linear-gradient(180deg,rgba(255,255,255,.065),rgba(255,255,255,.03));
+  --rim:linear-gradient(160deg,rgba(255,255,255,.18),rgba(255,255,255,.07) 35%,rgba(255,255,255,.05) 70%,rgba(255,255,255,.10));
+  --gbtn:linear-gradient(180deg,rgba(255,255,255,.10),rgba(255,255,255,.05));
+  --gbtn-edge:inset 0 0 0 1px rgba(255,255,255,.10),inset 0 1px 0 rgba(255,255,255,.16)}
+.card,.tile,.icon-btn,.tabbar,.search,.sheet{background:var(--glass);-webkit-backdrop-filter:blur(24px);backdrop-filter:blur(24px);isolation:isolate}
+.card,.tile,.icon-btn,.search{position:relative} /* tabbar и sheet остаются fixed */
+.icon-btn.sm{background:none;-webkit-backdrop-filter:none;backdrop-filter:none}
+.card::before,.tile::before,.icon-btn::before,.tabbar::before,.sheet::before{content:"";position:absolute;inset:0;border-radius:inherit;padding:1px;background:var(--rim);pointer-events:none;
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude}
+
+.sheet{background:linear-gradient(180deg,rgba(40,40,44,.92),rgba(18,18,20,.96));border-bottom-left-radius:0;border-bottom-right-radius:0}
+.search{box-shadow:inset 0 0 0 1px rgba(255,255,255,.08)}
+.sheet .search{background:rgba(255,255,255,.06)}
+.round{background:rgba(255,255,255,.08);box-shadow:inset 0 1px 0 rgba(255,255,255,.12)}
+.round.add{background:var(--ink);box-shadow:none}
+.w-in{background:rgba(255,255,255,.08)}
+.bar{background:rgba(255,255,255,.08)}
+
+
+/* ---------- фон: тёмно-синий, мягкое голубое свечение из углов ---------- */
+html{background:#060a18}
+body{background:transparent}
+.bg{position:fixed;inset:0;z-index:-1;pointer-events:none;overflow:hidden;
+  background:linear-gradient(180deg,#111116 0%,#0b0b0e 40%,#09090c 100%)}
+/* самый нижний слой: холодный блик из левого верхнего угла, вытянут по диагонали */
+.bg .sheen{position:absolute;left:-28%;top:-4%;width:118%;height:30%;transform:rotate(24deg)}
+/* сам блик: тот же сине-голубой, что внизу, но спокойнее */
+.bg .sheen::before{content:"";position:absolute;inset:0;filter:blur(16px);
+  background:radial-gradient(closest-side,rgba(25,105,255,.25),rgba(20,80,235,.09) 50%,transparent 100%)}
+/* поверх блика — еле цветные пятна */
+.bg .spots{position:absolute;inset:0;background:
+    radial-gradient(45% 22% at 0% 12%, rgba(60,100,255,.08), transparent 72%),
+    radial-gradient(40% 20% at 100% 40%, rgba(140,90,255,.06), transparent 72%),
+    radial-gradient(50% 20% at 15% 95%, rgba(60,110,255,.06), transparent 72%)}
+
+/* ---------- свечение главных цифр и кольца ---------- */
+.big{text-shadow:0 0 22px rgba(170,195,255,.45),0 0 2px rgba(255,255,255,.35)}
+.ring .mid{text-shadow:0 0 12px rgba(190,210,255,.7)}
+.ring svg{overflow:visible} /* свечение дуги не обрезается по краю svg */
+#ringArc{filter:drop-shadow(0 0 5px rgba(200,215,255,.85)) drop-shadow(0 0 12px rgba(150,180,255,.45))}
+
+/* ---------- почти бесцветное стекло: плашки, кнопки, поля ---------- */
+.icon-btn.sm{box-shadow:none}
+.icon-btn{background:var(--gbtn);box-shadow:var(--gbtn-edge)}
+.icon-btn::before{display:none}
+.icon-btn.sm{background:none}
+.round,.round.add,.chip,.btn.ghost{background:var(--gbtn);box-shadow:var(--gbtn-edge);color:var(--ink)}
+.chip.on{background:linear-gradient(180deg,rgba(255,255,255,.24),rgba(255,255,255,.12));color:#fff;box-shadow:inset 0 0 0 1px rgba(255,255,255,.22),inset 0 1px 0 rgba(255,255,255,.3)}
+.btn{background:linear-gradient(180deg,rgba(255,255,255,.18),rgba(255,255,255,.08));color:#fff;box-shadow:inset 0 0 0 1px rgba(255,255,255,.18),inset 0 1px 0 rgba(255,255,255,.28)}
+.btn.danger{background:transparent;color:var(--warn);box-shadow:inset 0 0 0 1px rgba(255,255,255,.12)}
+.btn.danger.armed{background:var(--warn);color:#fff}
+.w-in,.bar,.sheet .search,.search{background:rgba(255,255,255,.06)}
+.search,.w-in{box-shadow:inset 0 0 0 1px rgba(255,255,255,.08)}
+.fld input,.fld select{background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.1)}
+.day{background:rgba(255,255,255,.05);border-radius:50%}
+.day.sel{background:linear-gradient(180deg,rgba(255,255,255,.26),rgba(255,255,255,.12));color:#fff;box-shadow:inset 0 0 0 1px rgba(255,255,255,.25),inset 0 1px 0 rgba(255,255,255,.35)}
+.dot{border-color:rgba(255,255,255,.2)}
+
+/* ---------- нижние вкладки как сегмент-переключатель: стекло, активная — светлая «таблетка» ---------- */
+.tabbar{background:rgba(255,255,255,.06);-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);border:0;box-shadow:0 8px 24px rgba(2,6,20,.22)}
+.tabbar button{color:var(--mute)}
+.tabbar button.on{background:linear-gradient(180deg,rgba(255,255,255,.18),rgba(255,255,255,.07));color:#fff;box-shadow:inset 0 0 0 1px rgba(255,255,255,.16),inset 0 1px 0 rgba(255,255,255,.25)}
+.sheet{background:linear-gradient(180deg,rgba(30,36,64,.94),rgba(12,16,34,.97))}
+
+/* ---------- шрифты как на референсе: легче, аккуратнее ---------- */
+html,body{font-family:"SF Pro Text",-apple-system,BlinkMacSystemFont,Inter,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.title{font-weight:600;font-size:26px;letter-spacing:-.025em}
+.big{font-weight:600;letter-spacing:-.035em}
+.tile b{font-weight:600}
+.sec{font-weight:600}
+.ms .nm{font-weight:500}
+.w-num,.item .kc,.ms .kc{font-weight:600}
+.cap{font-size:12.5px;letter-spacing:.01em}
+
+/* выбранный день — белый круг, как активная кнопка на референсе */
+.day.sel{background:#fff;color:#0b0b0e;box-shadow:none}
+
+/* ---------- кнопка с неоновой обводкой (референс «Let me glow») ---------- */
+@property --ga{syntax:"<angle>";initial-value:0deg;inherits:false}
+@keyframes ga-spin{to{--ga:360deg}}
+.tabbar button.on,.btn:not(.ghost):not(.danger){position:relative;color:#fff;
+  background:radial-gradient(60% 70% at 50% 0%,rgba(255,255,255,.16),transparent 70%),linear-gradient(180deg,#1b1b21,#0e0e12);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.22),inset 0 0 0 1px rgba(255,255,255,.06)}
+/* бегущая цветная кромка */
+.tabbar button.on::after,.btn:not(.ghost):not(.danger)::after{content:"";position:absolute;inset:0;border-radius:inherit;padding:1.5px;pointer-events:none;
+  background:conic-gradient(from var(--ga),transparent 0 64%,#3b82f6 74%,#8b5cf6 82%,#ec4899 89%,transparent 96%);
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;
+  animation:ga-spin 5s linear infinite}
+/* мягкий ореол той же кромки за кнопкой */
+.tabbar button.on::before,.btn:not(.ghost):not(.danger)::before{content:"";position:absolute;inset:-1px;border-radius:inherit;z-index:-1;pointer-events:none;
+  background:conic-gradient(from var(--ga),transparent 0 64%,#3b82f6 74%,#8b5cf6 82%,#ec4899 89%,transparent 96%);
+  filter:blur(8px);opacity:.55;animation:ga-spin 5s linear infinite}
+@media (prefers-reduced-motion:reduce){.tabbar button.on::after,.tabbar button.on::before,.btn::after,.btn::before{animation:none}}
+
+/* нижняя панель — тёмная капсула */
+.tabbar{background:rgba(22,22,26,.72);box-shadow:0 8px 24px rgba(0,0,0,.35)}
+.sheet{background:linear-gradient(180deg,rgba(28,28,33,.96),rgba(14,14,17,.98))}
+
+/* ---------- свечение снизу с сеткой точек (референс «Reasoning») ---------- */
+.bg::before,.bg::after{content:"";position:absolute;left:-10%;right:-10%;bottom:0;pointer-events:none}
+.bg::before{height:50vh;filter:none;inset:auto -10% 0 -10%;
+  background:radial-gradient(62% 60% at 50% 108%,rgba(40,140,255,1),rgba(25,100,240,.55) 35%,rgba(20,70,210,.18) 62%,transparent 82%)}
+/* точки: видны в центре свечения и растворяются к краям и вверх */
+.bg::after{height:48vh;
+  background-image:radial-gradient(circle,rgba(170,205,255,.55) 0 1px,transparent 1.6px);background-size:11px 11px;background-position:center bottom;
+  -webkit-mask:radial-gradient(40% 75% at 50% 100%,#000 0%,rgba(0,0,0,.5) 40%,transparent 78%);mask:radial-gradient(40% 75% at 50% 100%,#000 0%,rgba(0,0,0,.5) 40%,transparent 78%);
+  opacity:.55}
+
+/* выбранная вкладка светлее: светлое стекло вместо чёрной таблетки, свечение кромки остаётся */
+.tabbar button.on{background:radial-gradient(70% 80% at 50% 0%,rgba(255,255,255,.22),transparent 70%),linear-gradient(180deg,rgba(255,255,255,.16),rgba(255,255,255,.07));
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.3),inset 0 0 0 1px rgba(255,255,255,.08)}
+
+/* нижние вкладки легче: почти прозрачная капсула, активная — тонкое стекло, свечение мягче */
+.tabbar{background:rgba(255,255,255,.035);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);box-shadow:0 4px 16px rgba(0,0,0,.18)}
+.tabbar button{color:rgba(255,255,255,.55)}
+.tabbar button.on{background:linear-gradient(180deg,rgba(255,255,255,.10),rgba(255,255,255,.035));box-shadow:inset 0 1px 0 rgba(255,255,255,.18)}
+.tabbar button.on::before{opacity:.32;filter:blur(7px)}
+.tabbar button.on::after{padding:1px;opacity:.85}
+
+/* ---------- лёгкость по всему приложению ---------- */
+/* всплывающие окна: стекло вместо почти чёрной панели, затемнение под ними мягче */
+.scrim{background:rgba(0,0,0,.28)}
+.sheet{background:linear-gradient(180deg,rgba(34,36,44,.72),rgba(20,21,27,.82));-webkit-backdrop-filter:blur(28px);backdrop-filter:blur(28px)}
+.sheet h2{font-weight:600;letter-spacing:-.015em}
+.grab{background:rgba(255,255,255,.18)}
+/* главная кнопка: светлое стекло, как выбранная вкладка; бегущая кромка тоньше и тише */
+.btn:not(.ghost):not(.danger){background:linear-gradient(180deg,rgba(255,255,255,.14),rgba(255,255,255,.05));box-shadow:inset 0 1px 0 rgba(255,255,255,.22)}
+.btn:not(.ghost):not(.danger)::before{opacity:.3;filter:blur(7px)}
+.btn:not(.ghost):not(.danger)::after{padding:1px;opacity:.85}
+.btn{font-weight:600}
+.btn.ghost{background:rgba(255,255,255,.05);box-shadow:inset 0 0 0 1px rgba(255,255,255,.08);font-weight:500}
+/* поля ввода: почти прозрачные, тонкая граница */
+.fld input,.fld select{background:rgba(255,255,255,.045);border:1px solid rgba(255,255,255,.08)}
+.fld input:focus,.fld select:focus,.search:focus,.w-in:focus{outline:none;border-color:rgba(140,180,255,.45);box-shadow:0 0 0 3px rgba(80,140,255,.15)}
+.search,.w-in{background:rgba(255,255,255,.045)}
+/* круглые кнопки и чипы чуть прозрачнее */
+.round,.chip,.icon-btn{background:linear-gradient(180deg,rgba(255,255,255,.085),rgba(255,255,255,.035))}
+.item .plus{background:rgba(255,255,255,.07)}
+/* плашки: заливка чуть тоньше, кромка остаётся — чтобы не терялись на фоне */
+:root{--glass:linear-gradient(180deg,rgba(255,255,255,.055),rgba(255,255,255,.022))}
+
+/* ---------- нижнее свечение вдвое меньше ---------- */
+.bg::before{height:25vh;opacity:.6}
+.bg::after{height:24vh;opacity:.4}
+
+/* ---------- типографика: чёткая иерархия и воздух ---------- */
+/* 1) главное — белое и крупное; 2) подписи — приглушённые; 3) мелочь — ещё тише */
+:root{--mute:rgba(235,235,245,.55);--faint:rgba(235,235,245,.36)}
+.top{margin:6px 2px 14px}
+.title{font-size:28px;font-weight:600;letter-spacing:-.03em}
+.title small{font-size:13px;margin-top:4px;color:var(--mute);font-weight:400}
+.days{margin-bottom:14px}
+.day{font-size:12px;font-weight:500}
+.card{padding:16px 18px;margin-bottom:10px}
+.tiles{gap:10px;margin-bottom:10px}
+.cap{font-size:12px;font-weight:500;color:var(--mute);letter-spacing:.02em;margin-bottom:8px}
+.hero{padding:18px 20px}
+.big{font-size:46px}
+.sub{font-size:13px;color:var(--faint);margin-top:8px}
+.ring .mid{font-size:15px;font-weight:600}
+.tile{padding:14px}
+.tile .cap{margin-bottom:6px}
+.tile b{font-size:24px;letter-spacing:-.025em}
+.tile b small,.w-num small{color:var(--faint);font-weight:400}
+.bar{margin-top:12px;height:5px}
+.row-card .cap{margin-bottom:4px}
+.meals-sum{padding:6px 18px}
+.ms{padding:12px 0;gap:12px}
+.ms .nm{font-size:15px;font-weight:500}
+.ms .nm small{font-size:12px;color:var(--faint);margin-top:2px}
+.ms .kc{font-size:15px}
+.sec{font-size:20px;margin:22px 4px 12px}
+.item{padding:12px 0}
+.item .nm small,.hint{color:var(--faint)}
+.tabbar button{font-size:11px;font-weight:500}
+/* подгонка под один экран iPhone: воздух сохраняем, но без лишнего */
+.top{margin:4px 2px 12px}
+.days{margin-bottom:12px}
+.card{margin-bottom:8px}
+.tiles{gap:8px;margin-bottom:8px}
+.hero{padding:16px 18px}
+.tile{padding:13px 14px}
+.bar{margin-top:10px}
+.meals-sum{padding:2px 18px}
+.ms{padding:10px 0}
+.big{font-size:42px}
+.title{font-size:26px}
+.ms{padding:9px 0}
+.meals-sum{padding:0 18px}
+.card{padding-top:14px;padding-bottom:14px}
+.meals-sum.card{padding-top:2px;padding-bottom:2px}
+/* заголовки разделов одной высоты — с кнопкой и без, чтобы не прыгали при переключении вкладок */
+.sec{min-height:40px;align-items:center}
+
+/* =====================================================================
+   СЕТКА. Шаг 4 px, основные отступы кратны 8.
+   Поля экрана 16 · между блоками 8 · внутри плашек 16 (плитки 12)
+   Высоты: кнопки 40 (малые 32), поля 40–44, строки списка ≥ 48, вкладки 64
+   ===================================================================== */
+:root{--page:16px;--gap:8px;--pad:16px;--r:20px}
+body{padding:calc(var(--sat) + 8px) var(--page) calc(var(--sab) + 100px)}
+.top{height:48px;margin:0 0 12px;padding:0}
+.title{line-height:28px}
+.title small{line-height:16px;margin-top:2px}
+.days{height:40px;margin:0 0 12px}
+.icon-btn{width:40px;height:40px}
+.icon-btn.sm{width:24px;height:40px}
+.card{padding:var(--pad);margin:0 0 var(--gap);border-radius:var(--r)}
+.hero{padding:var(--pad)}
+.tiles{gap:var(--gap);margin:0 0 var(--gap)}
+.tile{padding:12px;border-radius:var(--r)}
+.cap{line-height:16px;margin:0 0 8px}
+.tile .cap{margin:0 0 4px}
+.tile b{display:block;line-height:28px}
+.bar{margin-top:12px;height:4px}
+.big{line-height:44px}
+.sub{line-height:16px;margin-top:8px}
+.row-card{padding:12px var(--pad);min-height:64px}
+.row-card .cap{margin:0 0 4px}
+.w-num{line-height:24px}
+.round{width:40px;height:40px}
+.round.sm{width:32px;height:32px}
+.w-in{height:40px}
+.search{height:44px;margin:0 0 12px;border-radius:14px}
+.meals-sum.card{padding:0 var(--pad)}
+.ms{min-height:48px;padding:8px 0;gap:12px}
+.ms .nm{line-height:20px}
+.ms .nm small{line-height:16px;margin-top:0}
+.sec{min-height:40px;margin:16px 0 12px;line-height:28px}
+.chips.scroll{margin:0 calc(-1*var(--page)) 12px;padding:0 var(--page)}
+.chip{height:32px;padding:0 12px}
+#foodList .cap{margin:16px 4px 8px}
+.item{min-height:48px;padding:8px 0}
+.tabbar{padding:6px;bottom:calc(var(--sab) + 12px)}
+.tabbar button{height:52px}
+.sheet{padding:8px var(--page) calc(var(--sab) + 16px)}
+.btn{height:48px;border-radius:24px;margin-top:8px}
+.fld{margin-bottom:12px}
+.fld input,.fld select{height:44px;border-radius:12px}
+/* высоты блоков — кратны 4/8 */
+.tile{min-height:96px}
+.row-card{min-height:72px}
+.ms{min-height:52px;padding:7px 0}
+.day{color:rgba(235,235,245,.5)}
+.day.today:not(.sel){color:#fff}
+/* те же отступы на всех вкладках: под днями 12, группы через 16, подпись→плашка 8 */
+.sec{margin:12px 0 12px}
+#starterBtn{margin:0;display:block}
+#foodList .cap{margin:16px 4px 8px}
+#foodList>.cap:first-child,#starterBtn+.cap{margin-top:12px}
+#foodList .card{padding:4px var(--pad)}
+.item{min-height:56px;padding:8px 0}
+.sup{min-height:56px;padding:8px 0}
+#supCard .cap{margin-bottom:4px}
+.item .nm div,.sup .nm{line-height:20px}
+.item .nm small,.sup .nm small{display:block;line-height:16px}
+#supCard .cap{margin-bottom:8px}
+
+/* =================== доработки по гайдлайнам iOS =================== */
+/* контраст: самый тихий текст не бледнее ~4.5:1 на тёмном фоне */
+:root{--mute:rgba(235,235,245,.64);--faint:rgba(235,235,245,.5)}
+/* цифры одинаковой ширины — не «дрожат» при изменении */
+.big,.tile b,.w-num,.kc,.ring .mid,.res b,#wIn{font-variant-numeric:tabular-nums}
+/* зоны нажатия не меньше 44×44 при прежнем внешнем виде */
+.round.sm,.icon-btn.sm,.dot,.chip{position:relative}
+.round.sm::after{content:"";position:absolute;inset:-6px}
+.icon-btn.sm::after{content:"";position:absolute;inset:-2px -10px}
+.dot::after{content:"";position:absolute;inset:-8px}
+.chip::after{content:"";position:absolute;inset:-6px 0}
+/* смахивание строки: под ней красная «Удалить» */
+.swipe{position:relative;overflow:hidden;border-top:1px solid var(--line)}
+.swipe:first-child{border-top:0}
+.swipe .item{border-top:0;position:relative;z-index:1;transition:transform .2s ease;background:transparent}
+.swipe.drag .item{transition:none}
+.swipe.open .item{transform:translateX(-96px)}
+.swipe .del{position:absolute;right:0;top:6px;bottom:6px;width:88px;border-radius:12px;background:var(--warn);color:#fff;font-weight:600;font-size:14px;opacity:0;transition:opacity .15s}
+.swipe.open .del,.swipe.drag .del{opacity:1}
+/* потянуть вниз — обновить */
+.ptr{position:fixed;left:50%;top:calc(var(--sat) + 6px);width:28px;height:28px;margin-top:-4px;border-radius:50%;border:2.5px solid rgba(255,255,255,.25);border-top-color:#fff;opacity:0;transform:translate(-50%,0);z-index:20;pointer-events:none}
+.ptr.spin{opacity:1!important;animation:ptr-spin .8s linear infinite}
+@keyframes ptr-spin{to{transform:translate(-50%,40px) rotate(360deg)}}
+.sheet{touch-action:pan-y}
+/* заготовки плашек вместо «Загрузка…» */
+@keyframes shimmer{to{background-position:-200% 0}}
+.loading .big,.loading .tile b,.loading .w-num,.loading .ms .kc,.loading .ms small,.loading .sub{color:transparent!important;text-shadow:none!important;border-radius:8px;
+  background:linear-gradient(90deg,rgba(255,255,255,.05) 0%,rgba(255,255,255,.12) 50%,rgba(255,255,255,.05) 100%);background-size:200% 100%;animation:shimmer 1.3s linear infinite}
+.loading .tile b small,.loading .w-num small{color:transparent!important}
+.loading .ring .mid,.loading #ringArc{opacity:0}
+/* «Понижение прозрачности» в iOS: сплошные плашки вместо стекла */
+@media (prefers-reduced-transparency:reduce){
+  .card,.tile,.tabbar,.sheet,.icon-btn,.search,.round,.chip{background:#1d1d22!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important}
+  .bg .sheen,.bg::before,.bg::after{display:none}
+}
+
+/* =================== микроанимации (как в iOS) =================== */
+:root{--spring:cubic-bezier(.34,1.32,.52,1);--ease-ios:cubic-bezier(.32,.72,0,1)}
+/* вкладки: стекло и бегущая кромка теперь у переезжающей подложки, а не у кнопки */
+.tabbar button.on{background:none!important;box-shadow:none!important}
+.tabbar button.on::before,.tabbar button.on::after{display:none}
+.tabbar button{position:relative;z-index:1;transition:color .25s}
+.tab-pill{position:absolute;left:0;top:6px;height:52px;border-radius:26px;pointer-events:none;
+  transition:transform .5s var(--spring),width .5s var(--spring);
+  background:linear-gradient(180deg,rgba(255,255,255,.10),rgba(255,255,255,.035));box-shadow:inset 0 1px 0 rgba(255,255,255,.18)}
+.tab-pill::after{content:"";position:absolute;inset:0;border-radius:inherit;padding:1px;opacity:.85;
+  background:conic-gradient(from var(--ga),transparent 0 64%,#3b82f6 74%,#8b5cf6 82%,#ec4899 89%,transparent 96%);
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;animation:ga-spin 5s linear infinite}
+.tab-pill::before{content:"";position:absolute;inset:-1px;border-radius:inherit;z-index:-1;
+  background:conic-gradient(from var(--ga),transparent 0 64%,#3b82f6 74%,#8b5cf6 82%,#ec4899 89%,transparent 96%);filter:blur(7px);opacity:.32;animation:ga-spin 5s linear infinite}
+/* иконка выбранной вкладки чуть «подпрыгивает» */
+@keyframes tab-pop{0%{transform:scale(.82)}60%{transform:scale(1.12)}100%{transform:scale(1)}}
+.tabbar button.on svg{animation:tab-pop .45s var(--spring)}
+
+/* содержимое вкладки появляется с лёгким подъёмом, блоки — друг за другом */
+@keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+section:not([hidden])>*{animation:rise .42s var(--ease-ios) both}
+section:not([hidden])>*:nth-child(2){animation-delay:.03s}
+section:not([hidden])>*:nth-child(3){animation-delay:.06s}
+section:not([hidden])>*:nth-child(4){animation-delay:.09s}
+section:not([hidden])>*:nth-child(n+5){animation-delay:.12s}
+
+/* нажатие: кнопки и строки слегка вжимаются */
+.round,.icon-btn,.chip,.btn,.day,.ms,.item,.dot,.tabbar button{transition:transform .18s var(--ease-ios),background-color .2s,opacity .2s}
+.round:active,.icon-btn:active,.chip:active,.dot:active,.day:active{transform:scale(.9)}
+.btn:active,.ms:active,.tabbar button:active{transform:scale(.97)}
+.item:active{opacity:.6}
+
+/* окна: выезд по «пружинной» кривой iOS, затемнение плавно */
+.sheet{transition:transform .5s var(--ease-ios),visibility .5s}
+.scrim{transition:opacity .35s var(--ease-ios)}
+/* кольцо и полосы плавно доезжают до нового значения */
+#ringArc{transition:stroke-dashoffset .8s var(--ease-ios),stroke .3s}
+.bar>div{transition:width .7s var(--ease-ios)}
+
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
+}
+.loading .tile b{height:28px;width:72%;overflow:hidden;white-space:nowrap}
+.loading .bar>div{width:0!important}
+/* без «прыжков» при смене вкладок: полоса прокрутки не отнимает ширину (как в iOS — её не видно),
+   а нижний запас ровно под панель вкладок, чтобы главный экран не прокручивался впустую */
+html{scrollbar-width:none}
+html::-webkit-scrollbar{display:none}
+body{padding-bottom:calc(var(--sab) + 96px)}
+/* граммы в плитках БЖУ всегда в одну строку */
+.tile b{white-space:nowrap;font-size:22px}
+.tile b small{font-size:12px}
+/* БЖУ: значение и норма на разных строках — не вылезает при любых цифрах; колонки строго равные */
+.tiles{grid-template-columns:repeat(3,minmax(0,1fr))}
+.tile b{font-size:24px;line-height:28px;overflow:hidden;text-overflow:ellipsis}
+.tile .goal{display:block;font-size:12px;line-height:16px;color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tile .bar{margin-top:10px}
+.tile{min-height:104px}
+.loading .tile .goal{color:transparent}
+
+/* =================== лента дней: выбранный в центре, к краям — меньше и тише =================== */
+.days{overflow:hidden}
+.days-row{display:grid;grid-template-columns:repeat(7,1fr);align-items:center;justify-items:center;
+  transition:transform .42s var(--spring)}
+.day{position:relative;padding:0;transition:width .35s var(--spring),height .35s var(--spring),opacity .3s,font-size .3s}
+.day svg{position:absolute;inset:0;width:100%;height:100%;transform:rotate(-90deg)}
+.day.d0{width:44px;height:44px;font-size:13px;font-weight:600}
+.day.d1{width:34px;height:34px;font-size:11px;opacity:.95}
+.day.d2{width:30px;height:30px;font-size:10px;opacity:.75}
+.day.d3{width:26px;height:26px;font-size:9.5px;opacity:.5}
+.days{height:44px}
+body{padding-bottom:calc(var(--sab) + 88px)} /* панель 64 + отступ 12 + зазор 12 */
+
+/* =================== норма / перебор =================== */
+/* жиры больше не красные: красный оставлен только для перебора */
+:root{--p:#4ea1ff;--c:#ff9f43;--f:#a78bfa;--over:#ff5a4f}
+/* свечение у кольца убрано */
+#ringArc,#ringOver{filter:none;transition:stroke-dasharray .8s var(--ease-ios),stroke .3s}
+.ring .mid{text-shadow:none}
+.loading #ringOver{opacity:0}
+/* полоса из двух частей: зелёная (норма) и красная (лишнее), с тонким зазором */
+.bar{display:flex;gap:2px}
+.bar>div{flex:none;border-radius:4px}
+.bar>.ov{background:var(--over)}
+.tile .goal em{font-style:normal;color:var(--over)}
+
+/* «сверх нормы» — один спокойный цвет везде: белый. Прогресс калорий — мягкий зелёный */
+:root{--over:rgba(255,255,255,.85);--ring:#3ddc97}
+.tile .goal em{color:rgba(255,255,255,.85);font-weight:500}

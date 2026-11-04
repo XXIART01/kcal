@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<!-- Только для просмотра дизайна на компьютере: приложение в рамке iPhone 13 (390×844) с примером данных. В приложение не входит. -->
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ккал — iPhone 13</title>
+<style>
+  html,body{margin:0;height:100%;background:#1a1a1f;display:grid;place-items:center;overflow:hidden;font:12px -apple-system,Segoe UI,sans-serif;color:#888}
+  .phone{position:relative;width:390px;height:844px;border-radius:56px;padding:0;box-shadow:0 0 0 11px #0c0c0f,0 0 0 13px #3a3a40,0 30px 80px rgba(0,0,0,.6);overflow:hidden;transform-origin:center;background:#000}
+  iframe{width:390px;height:844px;border:0;display:block}
+  .island{position:absolute;top:11px;left:50%;transform:translateX(-50%);width:126px;height:37px;border-radius:20px;background:#000;z-index:3}
+  .status{position:absolute;top:0;left:0;right:0;height:47px;display:flex;align-items:center;justify-content:space-between;padding:0 34px 0 42px;color:#fff;font:600 16px -apple-system,Segoe UI,sans-serif;z-index:2;pointer-events:none}
+  .bat{width:25px;height:12px;border-radius:4px;border:1.5px solid rgba(255,255,255,.5);position:relative}.bat::after{content:"";position:absolute;inset:1.5px;width:70%;border-radius:2px;background:#fff}
+  .home{position:absolute;bottom:8px;left:50%;transform:translateX(-50%);width:134px;height:5px;border-radius:3px;background:#fff;z-index:2;pointer-events:none}
+</style>
+</head>
+<body>
+<div class="phone" id="phone">
+  <div class="status"><span>9:41</span><b class="bat"></b></div>
+  <div class="island"></div>
+  <iframe id="f" src="./?iphone"></iframe>
+  <div class="home"></div>
+</div>
+<script>
+  // вписать телефон в окно по высоте
+  const fit = () => { const k = Math.min(1, (innerHeight - 40) / 870, (innerWidth - 40) / 416); document.getElementById("phone").style.transform = `scale(${k})`; };
+  addEventListener("resize", fit); fit();
+
+  // пример данных вместо GitHub: подменяем хранилище внутри рамки и перезапускаем приложение
+  const f = document.getElementById("f");
+  f.addEventListener("load", async () => {
+    const w = f.contentWindow;
+    const p = n => String(n).padStart(2, "0"), iso = d => `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;
+    const db = {"settings.json": {kcal: 1900, p: 160, f: 60, c: 180, water: 1500},
+      "foods.json": [{id:"s1",name:"Творог 5%",cat:"Молочка",kcal:121,p:17,f:5,c:1.8},{id:"s9",name:"Куриное филе",cat:"Мясо, рыба, яйца",kcal:110,p:23,f:1.2,c:0},{id:"s21",name:"Банан",cat:"Овощи и фрукты",kcal:96,p:1.5,f:.2,c:21.8,pc:120}]};
+    for (let i = 2; i < 4; i++){ const d = new Date(); d.setDate(d.getDate() - i); db[`days/${iso(d)}.json`] = {items: [{id: "x", kcal: 1200 + i * 300}]}; }
+    // пример дня — вчера (среда): Б 180 · Ж 70 · У 210 — все три выше нормы
+    const wed = new Date(); wed.setDate(wed.getDate() - 1);
+    db[`days/${iso(wed)}.json`] = {water: 750, items: [
+      {id:"a",name:"Овсянка с бананом",meal:"Завтрак",time:"08:30",g:300,kcal:420,p:14,f:8,c:72},
+      {id:"c",name:"Кофе с молоком",meal:"Завтрак",time:"08:40",kcal:60,p:3,f:3,c:5},
+      {id:"b",name:"Гречка с курицей",meal:"Обед",time:"13:10",g:350,kcal:560,p:48,f:14,c:58},
+      {id:"d",name:"Лосось с рисом",meal:"Ужин",time:"19:30",g:380,kcal:620,p:45,f:22,c:60},
+      {id:"e",name:"Творог 5% с ягодами",meal:"Перекус",time:"16:30",g:400,kcal:550,p:70,f:23,c:15}]};
+    // Store объявлен через const — снаружи рамки его не видно, поэтому подменяем изнутри через eval
+    w.__mock = {hasToken: () => true, read: async k => db[k] ? {data: structuredClone(db[k])} : null,
+      update: async (k, fn) => (db[k] = fn(db[k]), db[k]), clearToken(){}, check: async () => {}};
+    w.eval("Object.assign(Store, __mock)");
+    w.eval(await (await fetch("js/app.js", {cache: "no-store"})).text());
+    setTimeout(() => w.document.getElementById("prev").click(), 300); // открыть среду
+  });
+</script>
+</body>
+</html>
