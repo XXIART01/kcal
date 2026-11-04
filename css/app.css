@@ -551,3 +551,5 @@ html,body{overscroll-behavior-y:none}
 body::before{content:"";position:fixed;left:0;right:0;top:0;height:calc(var(--sat) + 8px);z-index:4;pointer-events:none;opacity:0;transition:opacity .25s;
   background:linear-gradient(180deg,rgba(9,9,12,.85),rgba(9,9,12,.5) 70%,transparent)}
 html.scrolled body::before{opacity:1}
+/* цвет за краями страницы и полосы Safari = цвет верха фона, без шва */
+html{background:#111116}
