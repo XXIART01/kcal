@@ -555,14 +555,10 @@ html.scrolled body::before{opacity:1}
 html{background:#111116}
 
 /* =================== страница не «прыгает» =================== */
-/* сама страница зафиксирована: на коротких вкладках iOS больше не тянет весь экран вместе с панелью и фоном;
-   прокручивается только внутренний контейнер */
-html,body{height:100%;overflow:hidden}
-body{position:fixed;inset:0;padding:0}
-.scroller{position:fixed;inset:0;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;
-  padding:calc(var(--sat) + 8px) var(--page) calc(var(--sab) + 88px);scrollbar-width:none}
-.scroller::-webkit-scrollbar{display:none}
-
+/* обычная прокрутка документа (фиксировать страницу нельзя: iOS в режиме приложения тогда «укорачивает» экран).
+   Страница всегда не короче экрана — при переходе на короткую вкладку iOS не пересчитывает высоту и панель с фоном стоят */
+.scroller{display:block}
+body{min-height:100vh;min-height:100dvh}
 /* =================== плавность =================== */
 /* вкладка уходит мягко, следующая проявляется дольше и с меньшим сдвигом */
 section.leaving>*{opacity:0;transform:translateY(-4px);transition:opacity .14s ease,transform .14s ease;animation:none!important}

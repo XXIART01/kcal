@@ -1,6 +1,6 @@
 (() => {
   // ---------- constants ----------
-  const VERSION = 20;
+  const VERSION = 21;
   // отладка вёрстки: ?iphone — зоны iPhone 13, ?grid — сетка и размеры блоков
   if (/[?&]iphone/.test(location.search)) document.documentElement.classList.add("sim-iphone");
   if (/[?&]grid/.test(location.search)) addEventListener("load", () => document.head.appendChild(Object.assign(document.createElement("script"), {src: "js/grid.js"})));
@@ -578,7 +578,7 @@
   })();
   (() => {
     let y0 = null, dy = 0; const ptr = $("ptr");
-    addEventListener("touchstart", e => { y0 = $("scroller").scrollTop <= 0 && !$("sheet").classList.contains("on") && !$("app").hidden ? e.touches[0].clientY : null; dy = 0; }, {passive: true});
+    addEventListener("touchstart", e => { y0 = scrollY <= 0 && !$("sheet").classList.contains("on") && !$("app").hidden ? e.touches[0].clientY : null; dy = 0; }, {passive: true});
     addEventListener("touchmove", e => {
       if (y0 === null) return;
       dy = Math.max(0, e.touches[0].clientY - y0);
@@ -745,7 +745,7 @@
     clearTimeout(tabTimer);
     tabTimer = setTimeout(() => {
       document.querySelectorAll("section[data-tab]").forEach(x => { x.classList.remove("leaving"); x.hidden = x.dataset.tab !== b.dataset.tab; });
-      $("scroller").scrollTop = 0;
+      scrollTo(0, 0);
     }, matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 140);
   };
   new ResizeObserver(() => { const b = document.querySelector("#tabbar button.on"); if (b) movePill(b); }).observe($("tabbar"));
@@ -790,7 +790,7 @@
     render(); loadDay();
   }
 
-  $("scroller").addEventListener("scroll", e => document.documentElement.classList.toggle("scrolled", e.target.scrollTop > 4), {passive: true});
+  addEventListener("scroll", () => document.documentElement.classList.toggle("scrolled", scrollY > 4), {passive: true});
 
   // записи с компьютера (Claude) подхватываются при каждом возврате в приложение
   document.addEventListener("visibilitychange", () => {
