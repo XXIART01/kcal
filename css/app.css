@@ -553,3 +553,30 @@ body::before{content:"";position:fixed;left:0;right:0;top:0;height:calc(var(--sa
 html.scrolled body::before{opacity:1}
 /* цвет за краями страницы и полосы Safari = цвет верха фона, без шва */
 html{background:#111116}
+
+/* =================== страница не «прыгает» =================== */
+/* сама страница зафиксирована: на коротких вкладках iOS больше не тянет весь экран вместе с панелью и фоном;
+   прокручивается только внутренний контейнер */
+html,body{height:100%;overflow:hidden}
+body{position:fixed;inset:0;padding:0}
+.scroller{position:fixed;inset:0;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;
+  padding:calc(var(--sat) + 8px) var(--page) calc(var(--sab) + 88px);scrollbar-width:none}
+.scroller::-webkit-scrollbar{display:none}
+
+/* =================== плавность =================== */
+/* вкладка уходит мягко, следующая проявляется дольше и с меньшим сдвигом */
+section.leaving>*{opacity:0;transform:translateY(-4px);transition:opacity .14s ease,transform .14s ease;animation:none!important}
+@keyframes rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+section:not([hidden])>*{animation:rise .55s var(--ease-ios) both}
+/* окна: содержимое при смене шага проявляется плавно; затемнение и выезд — мягче */
+@keyframes swap-in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+#sheetBody.swap>*{animation:swap-in .38s var(--ease-ios) both}
+.scrim{transition:opacity .45s var(--ease-ios)}
+.sheet{transition:transform .55s var(--ease-ios),visibility .55s}
+/* после загрузки цифры проявляются, а не появляются рывком */
+.big,.tile b,.tile .goal,.w-num,.ms .kc,.ms small,.sub,.ring .mid{transition:color .5s ease,opacity .5s ease}
+#ringArc,#ringOver{transition:stroke-dasharray .9s var(--ease-ios),stroke .4s,opacity .5s}
+/* подписи вкладок и иконки меняют цвет плавно */
+.tabbar button{transition:color .35s ease,transform .18s var(--ease-ios)}
+.tab-pill{transition:transform .55s var(--spring),width .55s var(--spring)}
+@keyframes tab-pop{0%{transform:scale(.9)}60%{transform:scale(1.06)}100%{transform:scale(1)}}

@@ -1,6 +1,6 @@
 (() => {
   // ---------- constants ----------
-  const VERSION = 19;
+  const VERSION = 20;
   // отладка вёрстки: ?iphone — зоны iPhone 13, ?grid — сетка и размеры блоков
   if (/[?&]iphone/.test(location.search)) document.documentElement.classList.add("sim-iphone");
   if (/[?&]grid/.test(location.search)) addEventListener("load", () => document.head.appendChild(Object.assign(document.createElement("script"), {src: "js/grid.js"})));
@@ -560,7 +560,7 @@
   const saveConf = (path, data, msg) => Store.update(path, () => data, msg).catch(e => fail("Не сохранилось", e));
 
   // ---------- sheets ----------
-  function openSheet(html){ stopScan?.(); $("sheetBody").innerHTML = html; $("scrim").classList.add("on"); $("sheet").classList.add("on"); }
+  function openSheet(html){ stopScan?.(); const sb = $("sheetBody"); sb.innerHTML = html; sb.classList.remove("swap"); sb.offsetWidth; sb.classList.add("swap"); $("scrim").classList.add("on"); $("sheet").classList.add("on"); }
   function closeSheet(){ stopScan?.(); $("scrim").classList.remove("on"); $("sheet").classList.remove("on"); $("sheet").style.transform = ""; }
   (() => {
     const sh = $("sheet"); let y0 = null, dy = 0;
@@ -578,7 +578,7 @@
   })();
   (() => {
     let y0 = null, dy = 0; const ptr = $("ptr");
-    addEventListener("touchstart", e => { y0 = scrollY <= 0 && !$("sheet").classList.contains("on") && !$("app").hidden ? e.touches[0].clientY : null; dy = 0; }, {passive: true});
+    addEventListener("touchstart", e => { y0 = $("scroller").scrollTop <= 0 && !$("sheet").classList.contains("on") && !$("app").hidden ? e.touches[0].clientY : null; dy = 0; }, {passive: true});
     addEventListener("touchmove", e => {
       if (y0 === null) return;
       dy = Math.max(0, e.touches[0].clientY - y0);
@@ -734,12 +734,19 @@
   };
   // подложка выбранной вкладки переезжает к нажатой (сама анимация — в CSS)
   const movePill = b => { const p = $("tabPill"); p.style.width = b.offsetWidth + "px"; p.style.transform = `translateX(${b.offsetLeft}px)`; };
+  // смена вкладки: текущая мягко гаснет, затем новая мягко проявляется (без резкого исчезновения)
+  let tabTimer;
   $("tabbar").onclick = e => {
     const b = e.target.closest("button"); if (!b || b.classList.contains("on")) return;
     document.querySelectorAll("#tabbar button").forEach(x => x.classList.toggle("on", x === b));
     movePill(b);
-    document.querySelectorAll("section[data-tab]").forEach(x => x.hidden = x.dataset.tab !== b.dataset.tab);
-    scrollTo(0, 0);
+    const cur = document.querySelector("section[data-tab]:not([hidden])");
+    cur?.classList.add("leaving");
+    clearTimeout(tabTimer);
+    tabTimer = setTimeout(() => {
+      document.querySelectorAll("section[data-tab]").forEach(x => { x.classList.remove("leaving"); x.hidden = x.dataset.tab !== b.dataset.tab; });
+      $("scroller").scrollTop = 0;
+    }, matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 140);
   };
   new ResizeObserver(() => { const b = document.querySelector("#tabbar button.on"); if (b) movePill(b); }).observe($("tabbar"));
   $("settingsBtn").onclick = settingsSheet;
@@ -783,7 +790,7 @@
     render(); loadDay();
   }
 
-  addEventListener("scroll", () => document.documentElement.classList.toggle("scrolled", scrollY > 4), {passive: true});
+  $("scroller").addEventListener("scroll", e => document.documentElement.classList.toggle("scrolled", e.target.scrollTop > 4), {passive: true});
 
   // записи с компьютера (Claude) подхватываются при каждом возврате в приложение
   document.addEventListener("visibilitychange", () => {
