@@ -339,6 +339,11 @@
     render(); loadDay();
   }
 
+  // записи с компьютера (Claude) подхватываются при каждом возврате в приложение
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden && Store.hasToken() && !inflight && pendingWater == null) loadDay();
+  });
+
   if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js");
   boot();
 })();
