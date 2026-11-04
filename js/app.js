@@ -46,7 +46,6 @@
   let goals = structuredClone(DEFAULT_GOALS);
   let sups = defaultSups();
   let weekDocs = {};
-  let microAll = false;
   let pendingWater = null, waterTimer = null;
   let queue = Promise.resolve(), inflight = 0;
 
@@ -71,36 +70,40 @@
   function renderDate(){
     const d = parseIso(cur), t = todayIso();
     const rel = cur === t ? "Сегодня" : cur === addDays(t,-1) ? "Вчера" : cur === addDays(t,1) ? "Завтра" : "";
-    const long = d.toLocaleDateString("ru-RU", {day:"numeric", month:"long", weekday:"short"});
-    $("dateLbl").innerHTML = rel ? `${rel}<small>${esc(long)}</small>` : `${esc(long)}<small>${d.getFullYear()}</small>`;
+    const wd = d.toLocaleDateString("ru-RU", {weekday:"long"});
+    const long = d.toLocaleDateString("ru-RU", {day:"numeric", month:"long"});
+    $("dateLbl").innerHTML = `${esc(rel || wd[0].toUpperCase() + wd.slice(1))}<small>${esc(rel ? wd + ", " + long : long)}</small>`;
   }
 
   function render(){
     renderDate();
     const items = day.items || [], t = totals(items), g = goals;
     const arc = $("ringArc");
-    arc.style.strokeDashoffset = String(351.86 * (1 - Math.min(t.kcal / Math.max(g.kcal,1), 1)));
+    arc.style.strokeDashoffset = String(251.33 * (1 - Math.min(t.kcal / Math.max(g.kcal,1), 1)));
     arc.style.stroke = t.kcal > g.kcal ? "var(--warn)" : "var(--kcal)";
     const left = g.kcal - t.kcal;
     $("kLeft").textContent = fmt(Math.abs(left));
-    $("kLeftLbl").textContent = left >= 0 ? "ккал осталось" : "ккал сверх";
-    $("eatenTxt").textContent = `Съедено ${fmt(t.kcal)} ккал`;
-    $("goalTxt").textContent = `Цель ${fmt(g.kcal)}`;
-    $("macros").innerHTML = [["Белки","p","--p"],["Жиры","f","--f"],["Углеводы","c","--c"]].map(([n,k,col]) => {
+    $("kLeftLbl").textContent = left >= 0 ? "Осталось, ккал" : "Сверх нормы, ккал";
+    $("eatenTxt").textContent = `${fmt(t.kcal)} из ${fmt(g.kcal)} ккал`;
+    $("kPct").textContent = Math.round(t.kcal / Math.max(g.kcal,1) * 100) + "%";
+    $("macros").innerHTML = [["Белки","p","--p"],["Углеводы","c","--c"],["Жиры","f","--f"]].map(([n,k,col]) => {
       const pct = Math.min(100, t[k] / Math.max(g[k],1) * 100);
-      return `<div class="m-row"><div class="lbl"><span>${n}</span><i>${fmt(t[k])} / ${fmt(g[k])} г</i></div><div class="bar"><div style="width:${pct}%;background:var(${col})"></div></div></div>`;
+      return `<div class="tile"><div class="cap">${n}</div><b>${fmt(t[k])}<small> / ${fmt(g[k])} г</small></b><div class="bar"><div style="width:${pct}%;background:var(${t[k] > g[k] * 1.05 ? "--warn" : col})"></div></div></div>`;
     }).join("");
 
     const water = pendingWater ?? num(day.water);
-    const on = Math.floor(water / 250);
-    $("glasses").innerHTML = Array.from({length: Math.max(Math.round(g.water / 250), on)}, (_, i) => `<div class="glass${i<on?" on":""}"></div>`).join("");
     $("wNum").innerHTML = `${fmt(water)} <small>/ ${fmt(g.water)} мл</small>`;
 
     renderSups();
 
+    $("mealSum").innerHTML = MEALS.map(m => {
+      const list = items.filter(it => (MEALS.includes(it.meal) ? it.meal : "Перекус") === m);
+      const sum = list.reduce((s, it) => s + num(it.kcal), 0);
+      return `<div class="ms" data-meal="${m}"><div class="nm">${m}<small>${list.length ? esc(list.map(it => it.name).join(", ")) : "—"}</small></div><span class="kc">${list.length ? fmt(sum) : ""}</span><button class="round sm" data-add="${m}" aria-label="Добавить в ${m}">+</button></div>`;
+    }).join("");
     $("itemsCount").textContent = items.length ? `${items.length} поз.` : "";
     if (!items.length){
-      $("meals").innerHTML = `<div class="empty">Пока пусто. Нажми «Добавить».</div>`;
+      $("meals").innerHTML = `<div class="empty">Пока ничего не записано</div>`;
     } else {
       const groups = {};
       items.forEach(it => { const m = MEALS.includes(it.meal) ? it.meal : "Перекус"; (groups[m] ||= []).push(it); });
@@ -113,9 +116,9 @@
       }).join("");
     }
 
-    const shown = microAll ? MICRO : MICRO.filter(m => t._has[m.k]);
-    $("microToggle").textContent = microAll ? "только с данными" : "все";
-    $("micro").innerHTML = !shown.length ? `<div class="empty">Нет данных. Заполни микроэлементы в форме еды.</div>` : shown.map(m => {
+    const shown = MICRO.filter(m => t._has[m.k]);
+    $("microCard").hidden = !shown.length;
+    $("micro").innerHTML = shown.map(m => {
       const goal = num(g.micro?.[m.k] ?? m.def) || m.def, v = t[m.k];
       const over = m.limit && v > goal;
       return `<div class="mi${m.limit?" limit":""}${over?" over":""}"><div class="lbl"><span>${m.n}${m.limit?' <i style="font-size:11px">лимит</i>':""}</span><i>${fmt(v, v<10?1:0)} / ${fmt(goal, goal<10?1:0)} ${m.u}</i></div><div class="bar"><div style="width:${Math.min(100, v/goal*100)}%;background:${m.limit?"":"var(--kcal)"}"></div></div></div>`;
@@ -132,20 +135,21 @@
       const dots = Array.from({length: it.perDay}, (_, i) => `<button class="dot${i<n?" on":""}" data-sup="${esc(it.id)}" data-i="${i}" aria-label="Принято ${i+1}">${i<n?"✓":""}</button>`).join("");
       return `<div class="sup"><div class="nm">${esc(it.name)} ${esc(it.dose)}<small>${it.perDay}×/день · ${done ? "курс завершён" : "до " + ruDate(end(it))}</small></div><div class="dots">${dots}</div></div>`;
     }).join("");
-    $("supInfo").textContent = "анализы " + ruDate(addMonths(sups.start, sups.retestMonths));
+    $("supTab").hidden = !sups.items.length;
+    $("supInfo").textContent = "Анализы " + ruDate(addMonths(sups.start, sups.retestMonths));
   }
 
+  // неделя пн–вс, в которую попадает cur; кольцо = доля нормы калорий
+  const weekDays = () => { const wd = (parseIso(cur).getDay() + 6) % 7; return Array.from({length:7}, (_, i) => addDays(cur, i - wd)); };
   function renderWeek(){
-    const days = Array.from({length:7}, (_, i) => addDays(cur, i-6));
-    const vals = days.map(d => totals(d === cur ? day.items : weekDocs[d]?.items).kcal);
-    const max = Math.max(goals.kcal * 1.2, ...vals, 1);
-    $("week").innerHTML = `<div class="goal-line" style="bottom:calc(${goals.kcal / max * 100}% * (110 - 21) / 110 + 21px)"></div>` + days.map((d, i) => {
-      const v = vals[i], cls = v ? (v > goals.kcal * 1.05 ? "col over" : "col fill") : "col";
+    const t = todayIso();
+    $("week").innerHTML = weekDays().map(d => {
+      const k = totals(d === cur ? day.items : weekDocs[d]?.items).kcal;
+      const pct = Math.min(k / Math.max(goals.kcal,1), 1);
+      const col = k > goals.kcal * 1.05 ? "var(--warn)" : "var(--ink)";
       const wd = parseIso(d).toLocaleDateString("ru-RU", {weekday:"short"});
-      return `<button class="wk${d===cur?" sel":""}" data-d="${d}"><div class="${cls}" style="height:calc(${v / max * 100}% * (110 - 21) / 110)"></div><span>${esc(wd)}</span></button>`;
+      return `<button class="day${d===cur?" sel":""}${d===t?" today":""}" data-d="${d}" aria-label="${esc(ruDate(d))}"><svg width="40" height="40" viewBox="0 0 40 40"><circle cx="20" cy="20" r="18" fill="none" stroke="var(--soft)" stroke-width="2.5"/><circle cx="20" cy="20" r="18" fill="none" stroke="${col}" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="113.1" stroke-dashoffset="${113.1 * (1 - pct)}"/></svg>${esc(wd)}</button>`;
     }).join("");
-    const logged = vals.filter(v => v > 0);
-    $("wkSum").textContent = logged.length ? `Среднее за ${logged.length} дн. с записями: ${fmt(logged.reduce((a,b)=>a+b,0)/logged.length)} ккал` : "За неделю пока нет записей.";
   }
 
   // ---------- data ----------
@@ -160,7 +164,7 @@
       day = {...blank(d), ...(r?.data || {})};
       setStatus(""); render();
     } catch (e){ fail("Не загрузилось", e); }
-    const others = Array.from({length:6}, (_, i) => addDays(d, i-6));
+    const others = weekDays().filter(x => x !== d && x <= todayIso());
     const docs = await Promise.all(others.map(x => Store.read(dayPath(x)).then(r => r?.data, () => null)));
     if (d !== cur) return;
     weekDocs = {}; others.forEach((x, i) => { if (docs[i]) weekDocs[x] = docs[i]; });
@@ -202,14 +206,14 @@
   const nowTime = () => { const d = new Date(); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
   const guessMeal = () => { const h = new Date().getHours(); return h < 11 ? "Завтрак" : h < 16 ? "Обед" : h < 21 ? "Ужин" : "Перекус"; };
 
-  function itemForm(it){
+  function itemForm(it, meal){
     const v = k => it && it[k] != null ? esc(it[k]) : "";
     openSheet(`
       <h2>${it ? "Изменить" : "Добавить еду"}</h2>
       <form id="itemForm">
         <label class="fld"><span>Название</span><input name="name" value="${v("name")}" placeholder="Гречка с курицей" required></label>
         <div class="grid3 mt">
-          <label class="fld"><span>Приём</span><select name="meal">${MEALS.map(m => `<option${(it?.meal||guessMeal())===m?" selected":""}>${m}</option>`).join("")}</select></label>
+          <label class="fld"><span>Приём</span><select name="meal">${MEALS.map(m => `<option${(it?.meal||meal||guessMeal())===m?" selected":""}>${m}</option>`).join("")}</select></label>
           <label class="fld"><span>Время</span><input name="time" type="time" value="${v("time") || nowTime()}"></label>
           <label class="fld"><span>Вес, г</span><input name="g" inputmode="decimal" value="${v("g")}"></label>
         </div>
@@ -292,17 +296,30 @@
 
   // ---------- events ----------
   function go(d){ cur = d; day = blank(d); weekDocs = {}; pendingWater = null; render(); loadDay(); }
-  $("prev").onclick = () => go(addDays(cur,-1));
-  $("next").onclick = () => go(addDays(cur,1));
+  $("prev").onclick = () => go(addDays(cur,-7));
+  $("next").onclick = () => go(addDays(cur,7));
   $("dateLbl").onclick = () => go(todayIso());
-  $("w250").onclick = () => bumpWater(250);
-  $("w500").onclick = () => bumpWater(500);
+  $("wForm").onsubmit = e => {
+    e.preventDefault();
+    const v = Math.round(num($("wIn").value)) || 250; // пусто = стакан 250 мл
+    $("wIn").value = ""; $("wIn").blur();
+    if (v > 0 && v <= 5000) bumpWater(v);
+  };
   $("wMinus").onclick = () => bumpWater(-250);
-  $("addBtn").onclick = () => itemForm(null);
+  $("addBtn2").onclick = () => itemForm(null);
+  $("mealSum").onclick = e => {
+    const a = e.target.closest("[data-add]"); if (a) return itemForm(null, a.dataset.add);
+    if (e.target.closest(".ms")) document.querySelector('#tabbar [data-tab="food"]').click();
+  };
+  $("tabbar").onclick = e => {
+    const b = e.target.closest("button"); if (!b) return;
+    document.querySelectorAll("#tabbar button").forEach(x => x.classList.toggle("on", x === b));
+    document.querySelectorAll("section[data-tab]").forEach(x => x.hidden = x.dataset.tab !== b.dataset.tab);
+    scrollTo(0, 0);
+  };
   $("settingsBtn").onclick = settingsSheet;
-  $("microToggle").onclick = () => { microAll = !microAll; render(); };
   $("meals").onclick = e => { const b = e.target.closest(".item"); if (b) itemDetails(b.dataset.id); };
-  $("week").onclick = e => { const b = e.target.closest(".wk"); if (b && b.dataset.d !== cur) go(b.dataset.d); };
+  $("week").onclick = e => { const b = e.target.closest(".day"); if (b && b.dataset.d !== cur) go(b.dataset.d); };
   $("sups").onclick = e => {
     const b = e.target.closest(".dot"); if (!b) return;
     const id = b.dataset.sup, i = Number(b.dataset.i);
@@ -319,14 +336,14 @@
   };
 
   function showSetup(msg){
-    $("app").hidden = true; $("addBtn").hidden = true; $("setup").hidden = false;
+    $("app").hidden = true; $("tabbar").hidden = true; $("setup").hidden = false;
     $("tokErr").textContent = msg || "";
   }
 
   // ---------- boot ----------
   async function boot(){
     if (!Store.hasToken()) return showSetup();
-    $("setup").hidden = true; $("app").hidden = false; $("addBtn").hidden = false;
+    $("setup").hidden = true; $("app").hidden = false; $("tabbar").hidden = false;
     render(); setStatus("Загрузка…");
     try {
       let s = await Store.read("settings.json");
