@@ -45,6 +45,7 @@
   let day = blank(cur);
   let goals = structuredClone(DEFAULT_GOALS);
   let sups = defaultSups();
+  let foods = []; // мои продукты: {id, name, brand, kcal, p, f, c — на 100 г, pc — вес 1 шт в г}
   let weekDocs = {};
   let pendingWater = null, waterTimer = null;
   let queue = Promise.resolve(), inflight = 0;
@@ -101,30 +102,297 @@
       const sum = list.reduce((s, it) => s + num(it.kcal), 0);
       return `<div class="ms" data-meal="${m}"><div class="nm">${m}<small>${list.length ? esc(list.map(it => it.name).join(", ")) : "—"}</small></div><span class="kc">${list.length ? fmt(sum) : ""}</span><button class="round sm" data-add="${m}" aria-label="Добавить в ${m}">+</button></div>`;
     }).join("");
-    $("itemsCount").textContent = items.length ? `${items.length} поз.` : "";
-    if (!items.length){
-      $("meals").innerHTML = `<div class="empty">Пока ничего не записано</div>`;
-    } else {
-      const groups = {};
-      items.forEach(it => { const m = MEALS.includes(it.meal) ? it.meal : "Перекус"; (groups[m] ||= []).push(it); });
-      $("meals").innerHTML = MEALS.filter(m => groups[m]).map(m => {
-        const list = groups[m].sort((a,b) => String(a.time||"").localeCompare(String(b.time||"")));
-        const sum = list.reduce((s, it) => s + num(it.kcal), 0);
-        return `<div class="meal"><div class="meal-h">${m}<span>${fmt(sum)} ккал</span></div>` +
-          list.map(it => `<button class="item" data-id="${esc(it.id)}"><div class="nm"><div>${esc(it.name || "Без названия")}</div><small>${it.g?fmt(it.g)+" г · ":""}Б ${fmt(it.p)} · Ж ${fmt(it.f)} · У ${fmt(it.c)}${it.time?" · "+esc(it.time):""}</small></div><div class="kc">${fmt(it.kcal)}</div></button>`).join("") +
-          `</div>`;
-      }).join("");
-    }
-
-    const shown = MICRO.filter(m => t._has[m.k]);
-    $("microCard").hidden = !shown.length;
-    $("micro").innerHTML = shown.map(m => {
-      const goal = num(g.micro?.[m.k] ?? m.def) || m.def, v = t[m.k];
-      const over = m.limit && v > goal;
-      return `<div class="mi${m.limit?" limit":""}${over?" over":""}"><div class="lbl"><span>${m.n}${m.limit?' <i style="font-size:11px">лимит</i>':""}</span><i>${fmt(v, v<10?1:0)} / ${fmt(goal, goal<10?1:0)} ${m.u}</i></div><div class="bar"><div style="width:${Math.min(100, v/goal*100)}%;background:${m.limit?"":"var(--kcal)"}"></div></div></div>`;
-    }).join("");
-
+    renderFoods();
     renderWeek();
+  }
+
+  const r1 = v => Math.round(num(v) * 10) / 10;
+  const per100 = f => `${fmt(f.kcal)} ккал · Б ${fmt(f.p,1)} · Ж ${fmt(f.f,1)} · У ${fmt(f.c,1)}`;
+  const foodName = f => f.brand ? `${f.name}, ${f.brand}` : f.name;
+  // все слова запроса есть в названии или бренде
+  const match = (f, q) => { const h = (f.name + " " + (f.brand || "")).toLowerCase(); return q.toLowerCase().split(/\s+/).every(w => h.includes(w)); };
+  const foodRow = (f, attr) => `<button class="item" ${attr}><div class="nm"><div>${esc(f.name)}</div><small>${f.brand ? esc(f.brand) + " · " : ""}${per100(f)} на 100 г</small></div></button>`;
+  const newId = p => p + Date.now().toString(36) + Math.random().toString(36).slice(2,6);
+
+  // ---------- категории ----------
+  const CATS = ["Молочка","Мясо, рыба, яйца","Крупы, хлеб, макароны","Овощи и фрукты","Сладкое","Снеки","Напитки","Готовая еда","Другое"];
+  // порядок важен: первое совпадение побеждает («кофе с молоком» — напиток, «шоколадное молоко» — сладкое)
+  const CAT_WORDS = [
+    ["Готовая еда", "суп|борщ|щи|пицц|бургер|шаурм|ролл|суши|пельмен|вареник|плов|котлет|лазань|сэндвич|бутерброд|салат цезарь|оливье"],
+    ["Сладкое", "шоколад|конфет|печень|торт|пирож|морожен|пломбир|вафл|зефир|мармелад|халв|сахар|мёд|мед|варень|джем|десерт|батончик|круассан|пончик|сырок"],
+    ["Снеки", "чипс|орех|сухарик|попкорн|крекер|семечк|миндал|арахис|кешью|фисташ|снек"],
+    ["Напитки", "вода|газиров|кола|сок|морс|чай|кофе|лимонад|напит|энергет|квас|компот|пиво|вино|минерал"],
+    ["Молочка", "молок|молоч|кефир|ряженк|йогурт|творог|творож|сыр|сметан|сливк|простокваш|айран|масло сливоч|снежок|варенец"],
+    ["Мясо, рыба, яйца", "кур|цыпл|говя|свин|индей|мяс|фарш|рыб|лосос|сёмг|семг|форел|тунец|скумбр|кревет|яйц|яйк|колбас|сосис|ветчин|бекон|филе|грудк|печень куриная"],
+    ["Крупы, хлеб, макароны", "греч|рис|овсян|овёс|макарон|спагет|паст|хлеб|батон|лаваш|круп|булгур|киноа|мук|хлопь|гранол|мюсли|картоф|пюре|лапш"],
+    ["Овощи и фрукты", "банан|яблок|груш|апельсин|мандарин|виноград|ягод|клубни|малин|черник|голубик|огур|помидор|томат|морков|капуст|салат|лук|перец|кабач|брокколи|авокадо|лимон|киви|персик|абрикос|слив|арбуз|дын|гриб|шпинат|зелен|свекл|тыкв|фрукт|овощ"],
+  ].map(([c, w]) => [c, new RegExp("(^|[^а-яё])(" + w + ")", "i")]);
+  const TAG_CATS = [
+    ["Готовая еда", /^en:(meals|soups|pizzas|sandwiches|prepared)/], ["Сладкое", /^en:(sweet-snacks|chocolates|confectioneries|biscuits|desserts|ice-creams|cakes|candies)/],
+    ["Снеки", /^en:(salty-snacks|chips|crisps|nuts|appetizers)/], ["Молочка", /^en:(dairies|milks|cheeses|yogurts|fermented-milk)/],
+    ["Напитки", /^en:(beverages|waters|sodas|juices|teas|coffees)/], ["Мясо, рыба, яйца", /^en:(meats|fishes|seafood|eggs|poultry)/],
+    ["Крупы, хлеб, макароны", /^en:(cereals|breads|pastas|rices|groats)/], ["Овощи и фрукты", /^en:(fruits|vegetables|fresh-|mushrooms)/],
+  ];
+  function guessCat(name, tags){
+    for (const [c, re] of TAG_CATS) if ((tags || []).some(t => re.test(t))) return c;
+    const s = String(name || "").toLowerCase();
+    for (const [c, re] of CAT_WORDS) if (re.test(s)) return c;
+    return "Другое";
+  }
+  const catOf = f => CATS.includes(f.cat) ? f.cat : guessCat(f.name);
+  const catSelect = (sel, id) => `<select ${id ? `id="${id}"` : 'name="cat"'}>${CATS.map(c => `<option${c === sel ? " selected" : ""}>${c}</option>`).join("")}</select>`;
+
+  let foodCat = "";
+  function renderFoods(){
+    const q = $("foodQ").value.trim();
+    const have = CATS.filter(c => foods.some(f => catOf(f) === c));
+    if (foodCat && !have.includes(foodCat)) foodCat = "";
+    $("foodCats").innerHTML = have.length > 1 ? ["", ...have].map(c => `<button class="chip${c === foodCat ? " on" : ""}" data-cat="${esc(c)}">${c || "Все"}</button>`).join("") : "";
+    const list = foods.filter(f => (!q || match(f, q)) && (!foodCat || catOf(f) === foodCat));
+    if (!list.length){
+      $("foodList").innerHTML = `<div class="card"><div class="empty">${q || foodCat ? "Ничего не нашлось" : "Здесь будут сохранённые продукты. Найди продукт через «+» у приёма пищи, отсканируй штрихкод или добавь свой."}</div></div>`;
+      return;
+    }
+    $("foodList").innerHTML = CATS.filter(c => list.some(f => catOf(f) === c)).map(c =>
+      `<div class="cap">${c}</div><div class="card">${list.filter(f => catOf(f) === c).map(f => foodRow(f, `data-food="${esc(f.id)}"`)).join("")}</div>`).join("");
+  }
+
+  const saveFoods = msg => saveConf("foods.json", foods, msg);
+
+  // after(f) — что делать после сохранения (например, сразу ввести порцию)
+  function foodForm(f, after){
+    const v = k => f && f[k] != null ? esc(f[k]) : "";
+    const isNew = !f?.id;
+    openSheet(`<h2>${isNew ? "Новый продукт" : "Продукт"}</h2>
+      ${f?.code && isNew ? `<div class="hint">Штрихкод ${esc(f.code)}: ${f.name ? "в базе нет калорий" : "в базе не нашёлся"}. Впиши данные с упаковки — в следующий раз он найдётся сразу.</div>` : ""}
+      <form id="foodForm">
+        <label class="fld"><span>Название</span><input name="name" value="${v("name")}" placeholder="Творог 5%" required></label>
+        <div class="grid2">
+          <label class="fld"><span>Бренд</span><input name="brand" value="${v("brand")}" placeholder="необязательно"></label>
+          <label class="fld"><span>Категория</span>${catSelect(f ? catOf(f) : "Другое")}</label>
+        </div>
+        <label class="fld"><span>Вес 1 шт, г</span><input name="pc" inputmode="decimal" value="${v("pc")}" placeholder="если штучный: банан ≈ 120"></label>
+        <div class="hint">На 100 г</div>
+        <div class="grid4">
+          <label class="fld"><span>Ккал</span><input name="kcal" inputmode="decimal" value="${v("kcal")}" required></label>
+          <label class="fld"><span>Б, г</span><input name="p" inputmode="decimal" value="${v("p")}"></label>
+          <label class="fld"><span>Ж, г</span><input name="f" inputmode="decimal" value="${v("f")}"></label>
+          <label class="fld"><span>У, г</span><input name="c" inputmode="decimal" value="${v("c")}"></label>
+        </div>
+        <button class="btn" type="submit">Сохранить</button>
+        ${!isNew ? `<button class="btn danger" type="button" id="delFood">Удалить</button>` : ""}
+      </form>`);
+    const form = $("foodForm"), sel = form.elements.cat;
+    let touched = !isNew;
+    sel.onchange = () => touched = true;
+    form.elements.name.oninput = e => { if (!touched) sel.value = guessCat(e.target.value); };
+    form.onsubmit = e => {
+      e.preventDefault();
+      const fd = new FormData(form), n = k => r1(String(fd.get(k) ?? "").replace(",", "."));
+      const out = {id: f?.id || newId("f"), name: String(fd.get("name")).trim(), brand: String(fd.get("brand")).trim(), cat: fd.get("cat"), kcal: n("kcal"), p: n("p"), f: n("f"), c: n("c")};
+      if (n("pc") > 0) out.pc = n("pc");
+      if (f?.code) out.code = f.code;
+      if (!out.brand) delete out.brand;
+      foods = isNew ? [out, ...foods] : foods.map(x => x.id === f.id ? out : x);
+      renderFoods(); saveFoods((isNew ? "новый продукт: " : "продукт: ") + out.name);
+      if (after) after(out); else closeSheet();
+    };
+    if (!isNew){
+      const b = $("delFood");
+      b.onclick = () => {
+        if (!b.classList.contains("armed")){ b.classList.add("armed"); b.textContent = "Точно удалить?"; return; }
+        foods = foods.filter(x => x.id !== f.id);
+        closeSheet(); renderFoods(); saveFoods("удалён продукт: " + f.name);
+      };
+    }
+  }
+
+  // ---------- недавние (на этом устройстве) ----------
+  const RKEY = "kcal_recent";
+  const recent = () => { try { return JSON.parse(localStorage.getItem(RKEY)) || []; } catch { return []; } };
+  function remember(it){
+    const {id, meal, time, ...r} = it;
+    localStorage.setItem(RKEY, JSON.stringify([r, ...recent().filter(x => x.name !== r.name)].slice(0, 12)));
+  }
+  function addItem(it, msg){
+    remember(it);
+    mutate(d => ({...d, items: [...d.items, it]}), msg || "добавлено: " + it.name);
+  }
+
+  // ---------- Open Food Facts ----------
+  // база иногда отдаёт &quot; и т.п.; textarea раскодирует без выполнения разметки
+  const unent = v => { const t = document.createElement("textarea"); t.innerHTML = String(v ?? ""); return t.value; };
+  const OFF_FIELDS = "code,product_name,product_name_ru,brands,nutriments,categories_tags";
+  function offMap(x){
+    const n = x.nutriments || {};
+    const name = unent(x.product_name_ru || x.product_name).trim();
+    return {name, brand: unent(x.brands).split(",")[0].trim(), cat: guessCat(name, x.categories_tags), code: x.code,
+      kcal: n["energy-kcal_100g"] != null ? r1(n["energy-kcal_100g"]) : null, p: r1(n.proteins_100g), f: r1(n.fat_100g), c: r1(n.carbohydrates_100g)};
+  }
+  // база ограничивает частоту запросов: 503 приходит без CORS и выглядит как обрыв сети — повторяем
+  async function offFetch(u, sig){
+    let r;
+    for (let i = 0; i < 3; i++){
+      try { r = await fetch(u, {signal: sig}); } catch (e){ if (e.name === "AbortError") throw e; r = null; }
+      if (r && r.status !== 503 && r.status !== 429) break;
+      await new Promise(ok => setTimeout(ok, 1000 * (i + 1)));
+      if (sig?.aborted) throw new DOMException("", "AbortError");
+    }
+    if (!r) throw new Error("OFF сеть");
+    return r;
+  }
+  let offCtl, offTimer;
+  const offCache = new Map();
+  async function offSearch(q){
+    if (offCache.has(q)) return offCache.get(q);
+    offCtl?.abort(); offCtl = new AbortController();
+    const r = await offFetch("https://world.openfoodfacts.org/cgi/search.pl?" + new URLSearchParams({search_terms: q, search_simple: 1, json: 1, page_size: 40, fields: OFF_FIELDS}), offCtl.signal);
+    if (!r.ok) throw new Error("OFF " + r.status);
+    const out = ((await r.json()).products || []).map(offMap).filter(x => x.name && x.kcal != null);
+    offCache.set(q, out);
+    return out;
+  }
+  // -> продукт | null (нет в базе или нет калорий)
+  async function offByCode(code){
+    const r = await offFetch(`https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(code)}.json?fields=${OFF_FIELDS}`);
+    if (r.status === 404) return null;
+    if (!r.ok) throw new Error("OFF " + r.status);
+    const j = await r.json();
+    if (j.status !== 1 || !j.product) return null;
+    const p = offMap({...j.product, code});
+    return p.kcal == null ? {...p, kcal: undefined} : p;
+  }
+
+  function addSheet(meal){
+    let off = [];
+    const rec = recent();
+    openSheet(`<h2>${esc(meal)}</h2>
+      <div class="search-row"><input class="search" id="aq" type="search" placeholder="Ряженка, творог, банан…" autocomplete="off"><button class="round" id="ascan" aria-label="Сканировать штрихкод">${SCAN_ICON}</button></div>
+      <div id="ares"></div>
+      <button class="btn ghost" id="manual">Ввести вручную</button>`);
+    const draw = st => {
+      const q = $("aq").value.trim();
+      const mine = foods.filter(f => !q || match(f, q)).slice(0, q ? 30 : 8);
+      let h = "";
+      if (!q && rec.length) h += `<div class="cap">Недавние — нажми, чтобы повторить</div><div class="list">${rec.map((r, i) => `<button class="item" data-rec="${i}"><div class="nm"><div>${esc(r.name)}</div><small>${r.g ? fmt(r.g) + " г · " : ""}Б ${fmt(r.p)} · Ж ${fmt(r.f)} · У ${fmt(r.c)}</small></div><div class="kc">${fmt(r.kcal)}</div><span class="plus">+</span></button>`).join("")}</div>`;
+      if (mine.length) h += `<div class="cap">Мои продукты</div><div class="list">${mine.map(f => foodRow(f, `data-my="${esc(f.id)}"`)).join("")}</div>`;
+      if (q.length >= 2) h += `<div class="cap">База Open Food Facts</div>` + (st === "load" ? `<div class="empty">Ищу…</div>`
+        : st === "err" ? `<div class="empty">База не ответила. Попробуй ещё раз или введи вручную.</div>`
+        : off.length ? `<div class="list">${off.map((f, i) => foodRow(f, `data-off="${i}"`)).join("")}</div>` : `<div class="empty">В базе не нашлось</div>`);
+      if (!h) h = `<div class="empty">Начни вводить название или отсканируй штрихкод</div>`;
+      $("ares").innerHTML = h;
+    };
+    draw();
+    $("aq").oninput = () => {
+      const q = $("aq").value.trim(); off = [];
+      clearTimeout(offTimer); offCtl?.abort();
+      draw(q.length >= 2 ? "load" : "");
+      if (q.length >= 2) offTimer = setTimeout(() => offSearch(q).then(r => { off = r; draw(); }, e => { if (e.name !== "AbortError") draw("err"); }), 450);
+    };
+    $("ares").onclick = e => {
+      const b = e.target.closest("[data-my],[data-off],[data-rec]"); if (!b) return;
+      if (b.dataset.rec){
+        closeSheet();
+        return addItem({...rec[Number(b.dataset.rec)], id: newId("m"), meal, time: nowTime()}, "повтор: " + rec[Number(b.dataset.rec)].name);
+      }
+      if (b.dataset.my) portionSheet(foods.find(f => f.id === b.dataset.my), meal, false);
+      else portionSheet(off[Number(b.dataset.off)], meal, true);
+    };
+    $("ascan").onclick = () => scanSheet(meal);
+    $("manual").onclick = () => itemForm(null, meal);
+  }
+
+  function portionSheet(food, meal, fromBase){
+    openSheet(`<h2>${esc(food.name)}</h2>
+      <div class="hint">${food.brand ? esc(food.brand) + " · " : ""}на 100 г: ${per100(food)}</div>
+      <label class="fld"><span>Сколько, г</span><input id="pg" inputmode="decimal" value="${food.pc || 100}"></label>
+      ${food.pc ? `<div class="chips">${[1,2,3].map(n => `<button class="chip" data-n="${n}">${n} шт</button>`).join("")}</div>` : ""}
+      <div class="res" id="pres"></div>
+      ${fromBase ? `<label class="chk"><input type="checkbox" id="psave" checked> Сохранить в мои продукты</label>
+        <label class="fld" id="pcatW"><span>Категория</span>${catSelect(food.cat || guessCat(food.name), "pcat")}</label>` : ""}
+      <button class="btn" id="padd">Добавить в ${esc(meal.toLowerCase())}</button>`);
+    const g = () => num(String($("pg").value).replace(",", "."));
+    const calc = () => { const k = g() / 100; return {kcal: Math.round(food.kcal * k), p: r1(food.p * k), f: r1(food.f * k), c: r1(food.c * k)}; };
+    const show = () => { const c = calc(); $("pres").innerHTML = `<b>${fmt(c.kcal)}</b> ккал · Б ${fmt(c.p,1)} · Ж ${fmt(c.f,1)} · У ${fmt(c.c,1)}`; };
+    show(); $("pg").oninput = show;
+    if (fromBase) $("psave").onchange = e => $("pcatW").hidden = !e.target.checked;
+    $("sheetBody").querySelectorAll(".chip").forEach(b => b.onclick = () => { $("pg").value = r1(food.pc * b.dataset.n); show(); });
+    $("padd").onclick = () => {
+      if (!(g() > 0)) return $("pg").focus();
+      let f = food;
+      if (fromBase && $("psave").checked){
+        f = {id: newId("f"), name: food.name, brand: food.brand, cat: $("pcat").value, kcal: food.kcal, p: food.p, f: food.f, c: food.c};
+        if (food.code) f.code = food.code;
+        if (!f.brand) delete f.brand;
+        foods = [f, ...foods]; renderFoods(); saveFoods("новый продукт: " + f.name);
+      }
+      const out = {id: newId("m"), name: foodName(food), meal, time: nowTime(), g: r1(g()), ...calc()};
+      if (f.id) out.food = f.id;
+      closeSheet();
+      addItem(out);
+    };
+  }
+
+  // ---------- штрихкод ----------
+  const SCAN_ICON = `<svg viewBox="0 0 24 24" class="ico"><path d="M4 7V5a1 1 0 0 1 1-1h2M17 4h2a1 1 0 0 1 1 1v2M20 17v2a1 1 0 0 1-1 1h-2M7 20H5a1 1 0 0 1-1-1v-2M8 8v8M11 8v8M14 8v8M17 8v8"/></svg>`;
+  let stopScan = null;
+  // Safari не умеет BarcodeDetector — подгружаем полифил (zxing-wasm) только при первом сканировании
+  let detP;
+  const detector = () => detP ||= ("BarcodeDetector" in window
+    ? Promise.resolve(window.BarcodeDetector)
+    : import("https://cdn.jsdelivr.net/npm/barcode-detector@3.2.3/ponyfill/+esm").then(m => m.BarcodeDetector)
+  ).then(BD => new BD({formats: ["ean_13", "ean_8", "upc_a", "upc_e"]})).catch(e => { detP = null; throw e; });
+
+  function scanSheet(meal){
+    meal ||= guessMeal();
+    openSheet(`<h2>Штрихкод</h2>
+      <div class="scan"><video id="sv" playsinline muted></video><div class="scan-frame"></div></div>
+      <div class="hint" id="sst">Включаю камеру…</div>
+      <form id="scode" class="search-row"><input class="search" name="code" inputmode="numeric" pattern="[0-9]{6,14}" placeholder="или введи цифры под штрихкодом" autocomplete="off"><button class="round add" aria-label="Найти">→</button></form>`);
+    let alive = true, stream = null, timer = null;
+    stopScan = () => { alive = false; clearTimeout(timer); stream?.getTracks().forEach(t => t.stop()); stopScan = null; };
+    const st = t => { if ($("sst")) $("sst").textContent = t; };
+    $("scode").onsubmit = e => { e.preventDefault(); const c = String(new FormData(e.target).get("code")).replace(/\D/g, ""); if (c.length >= 6) found(c); };
+    async function found(code){
+      if (!alive) return;
+      stopScan?.();
+      const mine = foods.find(f => f.code === code);
+      if (mine) return portionSheet(mine, meal, false);
+      openSheet(`<h2>Штрихкод ${esc(code)}</h2><div class="empty">Ищу в базе…</div>`);
+      let p = null;
+      try { p = await offByCode(code); }
+      catch { return openSheet(`<h2>Штрихкод ${esc(code)}</h2><div class="empty">База не ответила. Проверь интернет и попробуй ещё раз.</div><button class="btn" id="sretry">Повторить</button>`), $("sretry").onclick = () => { alive = true; found(code); }; }
+      const done = f => portionSheet(f, meal, false);
+      if (p && p.kcal != null) return portionSheet(p, meal, true);
+      foodForm(p ? {...p, id: undefined} : {code}, done); // нет в базе или нет калорий — заполнить с упаковки
+    }
+    (async () => {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({video: {facingMode: "environment"}, audio: false});
+        if (!alive) return stopScanTracks();
+        const v = $("sv"); v.srcObject = stream; await v.play();
+        st("Наведи камеру на штрихкод");
+        const det = await detector();
+        const tick = async () => {
+          if (!alive) return;
+          try { const r = await det.detect(v); if (r[0]?.rawValue) return found(r[0].rawValue); } catch {}
+          timer = setTimeout(tick, 200);
+        };
+        tick();
+      } catch (e){
+        st(e?.name === "NotAllowedError" ? "Нет доступа к камере. Разреши камеру для приложения или введи цифры вручную." : "Камера недоступна. Введи цифры под штрихкодом.");
+      }
+    })();
+    function stopScanTracks(){ stream?.getTracks().forEach(t => t.stop()); }
+  }
+
+  function mealSheet(m){
+    const list = (day.items || []).filter(it => (MEALS.includes(it.meal) ? it.meal : "Перекус") === m).sort((a,b) => String(a.time||"").localeCompare(String(b.time||"")));
+    openSheet(`<h2>${m}</h2>
+      <div id="mlist">${list.length ? list.map(it => `<button class="item" data-id="${esc(it.id)}"><div class="nm"><div>${esc(it.name || "Без названия")}</div><small>${it.g?fmt(it.g)+" г · ":""}Б ${fmt(it.p)} · Ж ${fmt(it.f)} · У ${fmt(it.c)}${it.time?" · "+esc(it.time):""}</small></div><div class="kc">${fmt(it.kcal)}</div></button>`).join("") : `<div class="empty">Пока пусто</div>`}</div>
+      <button class="btn" id="madd">Добавить</button>`);
+    $("mlist").onclick = e => { const b = e.target.closest(".item"); if (b) itemDetails(b.dataset.id); };
+    $("madd").onclick = () => addSheet(m);
   }
 
   function renderSups(){
@@ -199,8 +467,8 @@
   const saveConf = (path, data, msg) => Store.update(path, () => data, msg).catch(e => fail("Не сохранилось", e));
 
   // ---------- sheets ----------
-  function openSheet(html){ $("sheetBody").innerHTML = html; $("scrim").classList.add("on"); $("sheet").classList.add("on"); }
-  function closeSheet(){ $("scrim").classList.remove("on"); $("sheet").classList.remove("on"); }
+  function openSheet(html){ stopScan?.(); $("sheetBody").innerHTML = html; $("scrim").classList.add("on"); $("sheet").classList.add("on"); }
+  function closeSheet(){ stopScan?.(); $("scrim").classList.remove("on"); $("sheet").classList.remove("on"); }
   $("scrim").onclick = closeSheet;
 
   const nowTime = () => { const d = new Date(); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
@@ -239,6 +507,7 @@
         if (raw === "") delete out[k]; else out[k] = num(raw);
       });
       closeSheet();
+      if (!it) remember(out);
       mutate(d => ({...d, items: d.items.some(x => x.id === out.id) ? d.items.map(x => x.id === out.id ? out : x) : [...d.items, out]}), (it ? "правка: " : "добавлено: ") + out.name);
     };
     if (it){
@@ -306,10 +575,14 @@
     if (v > 0 && v <= 5000) bumpWater(v);
   };
   $("wMinus").onclick = () => bumpWater(-250);
-  $("addBtn2").onclick = () => itemForm(null);
+  $("newFood").onclick = () => foodForm(null);
+  $("foodQ").oninput = renderFoods;
+  $("foodCats").onclick = e => { const b = e.target.closest("[data-cat]"); if (b){ foodCat = b.dataset.cat; renderFoods(); } };
+  $("scanBtn").onclick = () => scanSheet();
+  $("foodList").onclick = e => { const b = e.target.closest("[data-food]"); if (b) foodForm(foods.find(f => f.id === b.dataset.food)); };
   $("mealSum").onclick = e => {
-    const a = e.target.closest("[data-add]"); if (a) return itemForm(null, a.dataset.add);
-    if (e.target.closest(".ms")) document.querySelector('#tabbar [data-tab="food"]').click();
+    const a = e.target.closest("[data-add]"); if (a) return addSheet(a.dataset.add);
+    const r = e.target.closest(".ms"); if (r) mealSheet(r.dataset.meal);
   };
   $("tabbar").onclick = e => {
     const b = e.target.closest("button"); if (!b) return;
@@ -318,7 +591,6 @@
     scrollTo(0, 0);
   };
   $("settingsBtn").onclick = settingsSheet;
-  $("meals").onclick = e => { const b = e.target.closest(".item"); if (b) itemDetails(b.dataset.id); };
   $("week").onclick = e => { const b = e.target.closest(".day"); if (b && b.dataset.d !== cur) go(b.dataset.d); };
   $("sups").onclick = e => {
     const b = e.target.closest(".dot"); if (!b) return;
@@ -352,6 +624,8 @@
       let su = await Store.read("supplements.json");
       if (!su) await Store.update("supplements.json", () => sups, "добавки");
       else sups = su.data;
+      const fo = await Store.read("foods.json");
+      if (fo) foods = fo.data;
     } catch (e){ return fail("Не загрузилось", e); }
     render(); loadDay();
   }

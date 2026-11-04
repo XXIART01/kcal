@@ -18,7 +18,10 @@
 <div class="wrap" id="app" hidden>
   <div class="top">
     <button class="title" id="dateLbl"></button>
-    <button class="icon-btn" id="settingsBtn" aria-label="Цели">⚙︎</button>
+    <div class="top-btns">
+      <button class="icon-btn" id="scanBtn" aria-label="Сканировать штрихкод"><svg viewBox="0 0 24 24" class="ico"><path d="M4 7V5a1 1 0 0 1 1-1h2M17 4h2a1 1 0 0 1 1 1v2M20 17v2a1 1 0 0 1-1 1h-2M7 20H5a1 1 0 0 1-1-1v-2M8 8v8M11 8v8M14 8v8M17 8v8"/></svg></button>
+      <button class="icon-btn" id="settingsBtn" aria-label="Цели">⚙︎</button>
+    </div>
   </div>
 
   <div class="days">
@@ -69,14 +72,10 @@
   </section>
 
   <section data-tab="food" hidden>
-  <h3 class="sec">Еда <span id="itemsCount"></span><button class="round" id="addBtn2" aria-label="Добавить еду">+</button></h3>
-  <div class="card" id="meals"></div>
-
-  <div class="card" id="microCard">
-    <div class="cap">Микроэлементы</div>
-    <div class="micro" id="micro"></div>
-  </div>
-
+  <h3 class="sec">Мои продукты <button class="round" id="newFood" aria-label="Новый продукт">+</button></h3>
+  <input class="search" id="foodQ" type="search" placeholder="Поиск в моих продуктах" autocomplete="off">
+  <div class="chips scroll" id="foodCats"></div>
+  <div id="foodList"></div>
   </section>
 
   <div class="status" id="status"></div>
@@ -84,7 +83,7 @@
 
 <nav class="tabbar" id="tabbar" hidden>
   <button class="on" data-tab="today"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 8 8"/></svg>Сегодня</button>
-  <button data-tab="food"><svg viewBox="0 0 24 24"><path d="M7 3v8M5 3v5a2 2 0 0 0 4 0V3M7 11v10M17 3c-2 1-3 4-3 7h3v11"/></svg>Еда</button>
+  <button data-tab="food"><svg viewBox="0 0 24 24"><path d="M7 3v8M5 3v5a2 2 0 0 0 4 0V3M7 11v10M17 3c-2 1-3 4-3 7h3v11"/></svg>Продукты</button>
   <button data-tab="sups" id="supTab"><svg viewBox="0 0 24 24"><rect x="4" y="9" width="16" height="6" rx="3" transform="rotate(-45 12 12)"/><path d="M9.2 9.2l5.6 5.6"/></svg>Добавки</button>
 </nav>
 

@@ -115,3 +115,31 @@ summary{font-size:14px;color:var(--mute);cursor:pointer;padding:6px 0}
 .ms .nm small{display:block;font-weight:400;font-size:12px;color:var(--mute);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ms .kc{font-weight:650;white-space:nowrap}
 .round.sm{width:32px;height:32px;font-size:18px;flex:none}
+.search{width:100%;height:44px;border-radius:14px;border:0;background:var(--card);color:var(--ink);padding:0 14px;font:inherit;font-size:16px;margin-bottom:10px;-webkit-appearance:none}
+.sheet .search{background:var(--soft)}
+.search::placeholder{color:var(--mute)}
+.sheet .cap{margin-top:8px}
+.list{margin-bottom:6px}
+.list .item:first-child,#foodList .item:first-child,#mlist .item:first-child{border-top:0}
+.chips{display:flex;gap:8px;margin:-2px 0 10px}
+.chip{height:34px;padding:0 14px;border-radius:17px;background:var(--soft);font-size:14px;font-weight:600}
+.res{font-size:15px;color:var(--mute);margin:4px 0 12px}
+.res b{color:var(--ink);font-size:22px}
+.chk{display:flex;align-items:center;gap:8px;font-size:14px;margin-bottom:6px}
+.chk input{width:20px;height:20px;accent-color:var(--ok)}
+.top-btns{display:flex;gap:8px}
+.ico{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.round .ico{width:20px;height:20px}
+.search-row{display:flex;gap:8px;align-items:flex-start}
+.search-row .search{flex:1}
+.search-row .round{flex:none;height:44px;width:44px;display:grid;place-items:center}
+.chips.scroll{overflow-x:auto;flex-wrap:nowrap;margin:0 -14px 10px;padding:0 14px;scrollbar-width:none}
+.chips.scroll::-webkit-scrollbar{display:none}
+.chip{flex:none;white-space:nowrap}
+.chip.on{background:var(--ink);color:var(--bg)}
+#foodList .cap{margin:14px 4px 6px}
+#foodList .card{padding-top:4px;padding-bottom:4px}
+.item .plus{width:28px;height:28px;border-radius:50%;background:var(--soft);display:grid;place-items:center;flex:none;font-size:18px;align-self:center}
+.scan{position:relative;border-radius:18px;overflow:hidden;background:#111;aspect-ratio:4/3;margin-bottom:10px}
+.scan video{width:100%;height:100%;object-fit:cover;display:block}
+.scan-frame{position:absolute;left:12%;right:12%;top:30%;bottom:30%;border:2px solid rgba(255,255,255,.85);border-radius:14px;box-shadow:0 0 0 999px rgba(0,0,0,.35)}
