@@ -114,6 +114,31 @@
   const foodRow = (f, attr) => `<button class="item" ${attr}><div class="nm"><div>${esc(f.name)}</div><small>${f.brand ? esc(f.brand) + " · " : ""}${per100(f)} на 100 г</small></div></button>`;
   const newId = p => p + Date.now().toString(36) + Math.random().toString(36).slice(2,6);
 
+  // базовый набор: справочные КБЖУ на 100 г (крупы и макароны — сухие)
+  const STARTER = [
+    ["Молочка", "Творог 5%", 121, 17, 5, 1.8], ["Молочка", "Творог обезжиренный", 71, 16.5, 0.5, 1.3], ["Молочка", "Кефир 1%", 40, 3, 1, 4],
+    ["Молочка", "Молоко 2,5%", 52, 2.8, 2.5, 4.7], ["Молочка", "Ряженка 2,5%", 54, 2.9, 2.5, 4.2], ["Молочка", "Йогурт греческий 2%", 66, 8, 2, 4],
+    ["Молочка", "Сыр твёрдый 45%", 360, 23, 29, 0], ["Молочка", "Сметана 15%", 158, 2.6, 15, 3],
+    ["Мясо, рыба, яйца", "Куриное филе", 110, 23, 1.2, 0], ["Мясо, рыба, яйца", "Яйцо куриное", 157, 12.7, 11.5, 0.7, 55],
+    ["Мясо, рыба, яйца", "Филе индейки", 114, 23.6, 1.5, 0], ["Мясо, рыба, яйца", "Говядина", 187, 18.9, 12.4, 0],
+    ["Мясо, рыба, яйца", "Сёмга", 202, 20, 13, 0], ["Мясо, рыба, яйца", "Тунец в собственном соку", 96, 21, 1, 0],
+    ["Крупы, хлеб, макароны", "Гречка", 313, 12.6, 3.3, 62], ["Крупы, хлеб, макароны", "Рис белый", 344, 6.7, 0.7, 78.9],
+    ["Крупы, хлеб, макароны", "Овсяные хлопья", 352, 12.3, 6.2, 61.8], ["Крупы, хлеб, макароны", "Макароны из твёрдых сортов", 350, 12, 1.5, 71],
+    ["Крупы, хлеб, макароны", "Хлеб цельнозерновой", 245, 8.5, 3, 45, 30], ["Крупы, хлеб, макароны", "Картофель", 77, 2, 0.4, 16.3],
+    ["Овощи и фрукты", "Банан", 96, 1.5, 0.2, 21.8, 120], ["Овощи и фрукты", "Яблоко", 47, 0.4, 0.4, 9.8, 180],
+    ["Овощи и фрукты", "Апельсин", 43, 0.9, 0.2, 8.1, 200], ["Овощи и фрукты", "Огурец", 15, 0.8, 0.1, 2.8, 120],
+    ["Овощи и фрукты", "Помидор", 20, 1.1, 0.2, 3.7, 120],
+    ["Сладкое", "Шоколад молочный", 535, 7, 30, 57], ["Сладкое", "Мёд", 329, 0.8, 0, 81.5],
+    ["Снеки", "Миндаль", 609, 18.6, 53.7, 13], ["Снеки", "Грецкий орех", 654, 15.2, 65.2, 7], ["Снеки", "Чипсы картофельные", 520, 6.5, 30, 53],
+    ["Напитки", "Кола", 42, 0, 0, 10.6], ["Напитки", "Сок апельсиновый", 45, 0.7, 0.1, 10.4],
+    ["Другое", "Масло оливковое", 898, 0, 99.8, 0], ["Другое", "Арахисовая паста", 588, 25, 50, 20],
+  ].map(([cat, name, kcal, p, f, c, pc], i) => ({id: "s" + (i + 1), name, cat, kcal, p, f, c, ...(pc ? {pc} : {})}));
+  function addStarter(){
+    const have = new Set(foods.map(f => f.id)), add = STARTER.filter(s => !have.has(s.id));
+    if (!add.length) return;
+    foods = [...foods, ...add]; renderFoods(); saveFoods("базовые продукты");
+  }
+
   // ---------- категории ----------
   const CATS = ["Молочка","Мясо, рыба, яйца","Крупы, хлеб, макароны","Овощи и фрукты","Сладкое","Снеки","Напитки","Готовая еда","Другое"];
   // порядок важен: первое совпадение побеждает («кофе с молоком» — напиток, «шоколадное молоко» — сладкое)
@@ -149,11 +174,13 @@
     if (foodCat && !have.includes(foodCat)) foodCat = "";
     $("foodCats").innerHTML = have.length > 1 ? ["", ...have].map(c => `<button class="chip${c === foodCat ? " on" : ""}" data-cat="${esc(c)}">${c || "Все"}</button>`).join("") : "";
     const list = foods.filter(f => (!q || match(f, q)) && (!foodCat || catOf(f) === foodCat));
+    const missing = STARTER.filter(s => !foods.some(f => f.id === s.id)).length;
+    const starterBtn = missing && !q && !foodCat ? `<button class="btn ghost" id="starterBtn">Добавить базовый набор (${missing} продуктов)</button>` : "";
     if (!list.length){
-      $("foodList").innerHTML = `<div class="card"><div class="empty">${q || foodCat ? "Ничего не нашлось" : "Здесь будут сохранённые продукты. Найди продукт через «+» у приёма пищи, отсканируй штрихкод или добавь свой."}</div></div>`;
+      $("foodList").innerHTML = `<div class="card"><div class="empty">${q || foodCat ? "Ничего не нашлось" : "Здесь будут сохранённые продукты. Найди продукт через «+» у приёма пищи, отсканируй штрихкод или добавь свой."}</div></div>` + starterBtn;
       return;
     }
-    $("foodList").innerHTML = CATS.filter(c => list.some(f => catOf(f) === c)).map(c =>
+    $("foodList").innerHTML = starterBtn + CATS.filter(c => list.some(f => catOf(f) === c)).map(c =>
       `<div class="cap">${c}</div><div class="card">${list.filter(f => catOf(f) === c).map(f => foodRow(f, `data-food="${esc(f.id)}"`)).join("")}</div>`).join("");
   }
 
@@ -579,7 +606,7 @@
   $("foodQ").oninput = renderFoods;
   $("foodCats").onclick = e => { const b = e.target.closest("[data-cat]"); if (b){ foodCat = b.dataset.cat; renderFoods(); } };
   $("scanBtn").onclick = () => scanSheet();
-  $("foodList").onclick = e => { const b = e.target.closest("[data-food]"); if (b) foodForm(foods.find(f => f.id === b.dataset.food)); };
+  $("foodList").onclick = e => { if (e.target.closest("#starterBtn")) return addStarter(); const b = e.target.closest("[data-food]"); if (b) foodForm(foods.find(f => f.id === b.dataset.food)); };
   $("mealSum").onclick = e => {
     const a = e.target.closest("[data-add]"); if (a) return addSheet(a.dataset.add);
     const r = e.target.closest(".ms"); if (r) mealSheet(r.dataset.meal);
@@ -626,6 +653,7 @@
       else sups = su.data;
       const fo = await Store.read("foods.json");
       if (fo) foods = fo.data;
+      else { foods = [...STARTER]; await Store.update("foods.json", () => foods, "базовые продукты"); }
     } catch (e){ return fail("Не загрузилось", e); }
     render(); loadDay();
   }
