@@ -1,5 +1,6 @@
 (() => {
   // ---------- constants ----------
+  const VERSION = 9; // поднимать вместе с CACHE в sw.js
   const MEALS = ["Завтрак","Обед","Ужин","Перекус"];
   const MICRO = [
     {k:"fib", n:"Клетчатка", u:"г", def:30},
@@ -577,8 +578,17 @@
         </details>
         <button class="btn" type="submit">Сохранить</button>
         <button class="btn ghost" type="button" id="logout">Сменить токен</button>
+        <button class="btn ghost" type="button" id="hardUpdate">Обновить приложение</button>
+        <div class="hint" style="text-align:center;margin-top:10px">Версия ${VERSION}</div>
       </form>`);
     $("logout").onclick = () => { closeSheet(); Store.clearToken(); showSetup(); };
+    // аварийный выход, если иконка на экране «Домой» застряла на старой версии
+    $("hardUpdate").onclick = async () => {
+      const regs = await navigator.serviceWorker?.getRegistrations?.() || [];
+      await Promise.all(regs.map(r => r.unregister()));
+      if (window.caches) await Promise.all((await caches.keys()).map(k => caches.delete(k)));
+      location.replace(location.pathname + "?u=" + Date.now());
+    };
     $("gForm").onsubmit = e => {
       e.preventDefault();
       const fd = new FormData(e.target);
