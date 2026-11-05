@@ -1,6 +1,6 @@
 (() => {
   // ---------- constants ----------
-  const VERSION = 36;
+  const VERSION = 37;
   // отладка вёрстки: ?iphone — зоны iPhone 13, ?grid — сетка и размеры блоков
   if (/[?&]iphone/.test(location.search)) document.documentElement.classList.add("sim-iphone");
   if (/[?&]grid/.test(location.search)) addEventListener("load", () => document.head.appendChild(Object.assign(document.createElement("script"), {src: "js/grid.js"})));
@@ -129,13 +129,17 @@
 
   const r1 = v => Math.round(num(v) * 10) / 10;
   const per100 = f => `${fmt(f.kcal)} ккал · Б ${fmt(f.p,1)} · Ж ${fmt(f.f,1)} · У ${fmt(f.c,1)}`;
-  const foodName = f => f.brand ? `${f.name}, ${f.brand}` : f.name;
+  // как продукт называется везде: «Творог 5% · Простоквашино» (без фирмы семь творогов не различить)
+  const foodName = f => f.brand ? `${f.name} · ${f.brand}` : f.name;
+  const storeTag = f => f.store ? `<span class="tag">${esc(f.store)}</span>` : "";
+  const STORES = ["Пятёрочка", "Перекрёсток", "Самокат", "ВкусВилл", "Магнит", "Лента", "Ашан", "Яндекс Лавка", "Озон фреш"];
   // все слова запроса есть в названии или бренде
-  const match = (f, q) => { const h = (f.name + " " + (f.brand || "")).toLowerCase(); return q.toLowerCase().split(/\s+/).every(w => h.includes(w)); };
+  // все слова запроса есть в названии, фирме или магазине (ё = е)
+  const match = (f, q) => { const h = [f.name, f.brand, f.store].join(" ").toLowerCase().replace(/ё/g, "е"); return q.toLowerCase().replace(/ё/g, "е").split(/\s+/).every(w => h.includes(w)); };
   const STAR = `<svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8L3.5 9.7l5.9-.9z"/></svg>`;
   // строка «Моих продуктов» со звёздочкой «в избранное» справа
   const favRow = f => `<div class="frow">${foodRow(f, `data-food="${esc(f.id)}"`)}<button class="star${f.fav ? " on" : ""}" data-star="${esc(f.id)}" aria-pressed="${!!f.fav}" aria-label="${f.fav ? "Убрать из избранного" : "В избранное"}">${STAR}</button></div>`;
-  const foodRow = (f, attr) => `<button class="item" ${attr}><div class="nm"><div>${esc(f.name)}</div><small>${f.brand ? esc(f.brand) + " · " : ""}${per100(f)} на 100 г</small></div></button>`;
+  const foodRow = (f, attr) => `<button class="item" ${attr}><div class="nm"><div>${esc(foodName(f))}</div><small>${storeTag(f)}${per100(f)} на 100 г</small></div></button>`;
   const newId = p => p + Date.now().toString(36) + Math.random().toString(36).slice(2,6);
 
   // базовый набор: справочные КБЖУ на 100 г (крупы и макароны — сухие)
@@ -225,9 +229,10 @@
       <form id="foodForm">
         <label class="fld"><span>Название</span><input name="name" value="${v("name")}" placeholder="Творог 5%" required></label>
         <div class="grid2">
-          <label class="fld"><span>Бренд</span><input name="brand" value="${v("brand")}" placeholder="необязательно"></label>
-          <label class="fld"><span>Категория</span>${catSelect(f ? catOf(f) : "Другое")}</label>
+          <label class="fld"><span>Фирма</span><input name="brand" value="${v("brand")}" placeholder="Простоквашино, Lay's…"></label>
+          <label class="fld"><span>Магазин</span><input name="store" list="storeList" value="${v("store")}" placeholder="Пятёрочка…"><datalist id="storeList">${STORES.map(s => `<option value="${s}">`).join("")}</datalist></label>
         </div>
+        <label class="fld"><span>Категория</span>${catSelect(f ? catOf(f) : "Другое")}</label>
         <div class="grid2">
           <label class="fld"><span>Порция</span><select name="pcName">${PORTIONS.map(p => `<option${p === (f?.pcName || "штука") ? " selected" : ""}>${p}</option>`).join("")}</select></label>
           <label class="fld"><span>Вес порции, г</span><input name="pc" inputmode="decimal" value="${v("pc")}" placeholder="пачка чипсов ≈ 140"></label>
@@ -250,10 +255,11 @@
     form.onsubmit = e => {
       e.preventDefault();
       const fd = new FormData(form), n = k => r1(String(fd.get(k) ?? "").replace(",", "."));
-      const out = {id: f?.id || newId("f"), name: String(fd.get("name")).trim(), brand: String(fd.get("brand")).trim(), cat: fd.get("cat"), kcal: n("kcal"), p: n("p"), f: n("f"), c: n("c")};
+      const out = {id: f?.id || newId("f"), name: String(fd.get("name")).trim(), brand: String(fd.get("brand")).trim(), store: String(fd.get("store") || "").trim(), cat: fd.get("cat"), kcal: n("kcal"), p: n("p"), f: n("f"), c: n("c")};
       if (n("pc") > 0){ out.pc = n("pc"); if (fd.get("pcName") !== "штука") out.pcName = fd.get("pcName"); }
       if (f?.code) out.code = f.code;
       if (!out.brand) delete out.brand;
+      if (!out.store) delete out.store;
       foods = isNew ? [out, ...foods] : foods.map(x => x.id === f.id ? out : x);
       renderFoods(); saveFoods((isNew ? "новый продукт: " : "продукт: ") + out.name);
       if (after) after(out);
@@ -309,12 +315,14 @@
   // ---------- Open Food Facts ----------
   // база иногда отдаёт &quot; и т.п.; textarea раскодирует без выполнения разметки
   const unent = v => { const t = document.createElement("textarea"); t.innerHTML = String(v ?? ""); return t.value; };
-  const OFF_FIELDS = "code,product_name,product_name_ru,brands,nutriments,categories_tags,serving_quantity,product_quantity,quantity";
+  const OFF_FIELDS = "code,product_name,product_name_ru,brands,nutriments,categories_tags,serving_quantity,product_quantity,quantity,stores";
   function offMap(x){
     const n = x.nutriments || {};
     let name = unent(x.product_name_ru || x.product_name).trim().replace(/\s+/g, " ");
     name = name.charAt(0).toUpperCase() + name.slice(1); // в базе названия пишут люди, часто строчными
-    return {name, brand: unent(x.brands).split(",")[0].trim(), cat: guessCat(name, x.categories_tags), code: x.code,
+    let brand = unent(x.brands).split(",")[0].trim(); brand = brand.charAt(0).toUpperCase() + brand.slice(1);
+    const st = unent(x.stores).toLowerCase().replace(/ё/g, "е"), store = STORES.find(s => st.includes(s.toLowerCase().replace(/ё/g, "е")));
+    return {name, brand, ...(store ? {store} : {}), cat: guessCat(name, x.categories_tags), code: x.code,
       kcal: n["energy-kcal_100g"] != null ? r1(n["energy-kcal_100g"]) : null, p: r1(n.proteins_100g), f: r1(n.fat_100g), c: r1(n.carbohydrates_100g),
       ...offPortion(x)};
   }
@@ -390,7 +398,7 @@
     $("asec").onclick = e => { const b = e.target.closest("[data-sec]"); if (!b) return; sec = b.dataset.sec; drawSecs(); draw(); };
     // строка продукта: нажатие — выбрать граммы; «+» справа — добавить сразу прошлой порцией (окно не закрывается)
     const quickRow = f => { const g = defaultG(f), c = portionOf(f, g);
-      return `<div class="frow">${`<button class="item" data-my="${esc(f.id)}"><div class="nm"><div>${f.fav ? "★ " : ""}${esc(f.name)}</div><small>${fmt(g)} г · ${fmt(c.kcal)} ккал · Б ${fmt(c.p)} · Ж ${fmt(c.f)} · У ${fmt(c.c)}</small></div></button>`}<button class="qadd" data-q="${esc(f.id)}" aria-label="Добавить ${esc(f.name)} ${fmt(g)} г">${ICON_PLUS}</button></div>`; };
+      return `<div class="frow">${`<button class="item" data-my="${esc(f.id)}"><div class="nm"><div>${f.fav ? "★ " : ""}${esc(foodName(f))}</div><small>${storeTag(f)}${fmt(g)} г · ${fmt(c.kcal)} ккал · Б ${fmt(c.p)} · Ж ${fmt(c.f)} · У ${fmt(c.c)}</small></div></button>`}<button class="qadd" data-q="${esc(f.id)}" aria-label="Добавить ${esc(f.name)} ${fmt(g)} г">${ICON_PLUS}</button></div>`; };
     const draw = st => {
       if (!$("aq")) return; // окно уже закрыли, а ответ базы пришёл позже
       const q = $("aq").value.trim();
@@ -497,8 +505,8 @@
     meal ||= guessMeal();
     const dayName = cur === todayIso() ? "сегодня" : ruDate(cur);
     const box = amountBox(food, food.id ? defaultG(food) : food.pc || 100, () => show());
-    openSheet(`<h2>${esc(food.name)}</h2>
-      <div class="hint">${food.brand ? esc(food.brand) + " · " : ""}на 100 г: ${per100(food)}</div>
+    openSheet(`<h2>${esc(foodName(food))}</h2>
+      <div class="hint">${storeTag(food)}на 100 г: ${per100(food)}</div>
       ${pick ? `<div class="cap">Приём пищи · ${esc(dayName)}</div><div class="chips seg" id="pmeal">${MEALS.map(m => `<button class="chip${m === meal ? " on" : ""}" data-m="${m}">${m}</button>`).join("")}</div>` : ""}
       ${box.html}
       <div class="res" id="pres"></div>
@@ -523,6 +531,7 @@
         f = {id: newId("f"), name: food.name, brand: food.brand, cat: $("pcat").value, kcal: food.kcal, p: food.p, f: food.f, c: food.c};
         if (food.code) f.code = food.code;
         if (food.pc){ f.pc = food.pc; if (food.pcName) f.pcName = food.pcName; }
+        if (food.store) f.store = food.store;
         if (!f.brand) delete f.brand;
         foods = [f, ...foods]; renderFoods(); saveFoods("новый продукт: " + f.name);
       }

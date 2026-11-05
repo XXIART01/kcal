@@ -657,3 +657,6 @@ section:not([hidden])>*{animation:rise .55s var(--ease-ios) both}
 #aquick:empty{display:none}
 #anote{margin:0 0 4px}
 #anote:empty{display:none}
+
+/* метка магазина под названием продукта */
+.tag{display:inline-block;margin-right:6px;padding:0 6px;border-radius:6px;font-size:11px;line-height:16px;color:rgba(235,235,245,.75);background:rgba(255,255,255,.08)}
