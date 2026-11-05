@@ -1,6 +1,6 @@
 (() => {
   // ---------- constants ----------
-  const VERSION = 33;
+  const VERSION = 35;
   // отладка вёрстки: ?iphone — зоны iPhone 13, ?grid — сетка и размеры блоков
   if (/[?&]iphone/.test(location.search)) document.documentElement.classList.add("sim-iphone");
   if (/[?&]grid/.test(location.search)) addEventListener("load", () => document.head.appendChild(Object.assign(document.createElement("script"), {src: "js/grid.js"})));
@@ -228,7 +228,10 @@
           <label class="fld"><span>Бренд</span><input name="brand" value="${v("brand")}" placeholder="необязательно"></label>
           <label class="fld"><span>Категория</span>${catSelect(f ? catOf(f) : "Другое")}</label>
         </div>
-        <label class="fld"><span>Вес 1 шт, г</span><input name="pc" inputmode="decimal" value="${v("pc")}" placeholder="если штучный: банан ≈ 120"></label>
+        <div class="grid2">
+          <label class="fld"><span>Порция</span><select name="pcName">${PORTIONS.map(p => `<option${p === (f?.pcName || "штука") ? " selected" : ""}>${p}</option>`).join("")}</select></label>
+          <label class="fld"><span>Вес порции, г</span><input name="pc" inputmode="decimal" value="${v("pc")}" placeholder="пачка чипсов ≈ 140"></label>
+        </div>
         <div class="hint">На 100 г</div>
         <div class="grid4">
           <label class="fld"><span>Ккал</span><input name="kcal" inputmode="decimal" value="${v("kcal")}" required></label>
@@ -248,7 +251,7 @@
       e.preventDefault();
       const fd = new FormData(form), n = k => r1(String(fd.get(k) ?? "").replace(",", "."));
       const out = {id: f?.id || newId("f"), name: String(fd.get("name")).trim(), brand: String(fd.get("brand")).trim(), cat: fd.get("cat"), kcal: n("kcal"), p: n("p"), f: n("f"), c: n("c")};
-      if (n("pc") > 0) out.pc = n("pc");
+      if (n("pc") > 0){ out.pc = n("pc"); if (fd.get("pcName") !== "штука") out.pcName = fd.get("pcName"); }
       if (f?.code) out.code = f.code;
       if (!out.brand) delete out.brand;
       foods = isNew ? [out, ...foods] : foods.map(x => x.id === f.id ? out : x);
@@ -279,7 +282,7 @@
   const useN = (u, id) => typeof u[id] === "number" ? u[id] : u[id]?.n || 0;
   const lastG = id => usage()[id]?.g; // сколько граммов брали в прошлый раз
   // items — порции [{food, g}] или id продуктов
-  const bumpUsage = list => { const u = usage(); list.forEach(x => { const id = x?.food ?? x; if (!id) return; u[id] = {n: useN(u, id) + 1, g: x?.g ?? u[id]?.g}; }); localStorage.setItem(UKEY, JSON.stringify(u)); };
+  const bumpUsage = list => { const u = usage(); list.forEach(x => { const id = x?.food ?? x; if (!id) return; u[id] = {...(typeof u[id] === "object" ? u[id] : {}), n: useN(u, id) + 1, g: x?.g ?? u[id]?.g}; }); localStorage.setItem(UKEY, JSON.stringify(u)); };
   // частые — первыми, при равенстве — прежний порядок
   const byUse = list => { const u = usage(); return list.map((f, i) => [f, i]).sort((a, b) => useN(u, b[0].id) - useN(u, a[0].id) || a[1] - b[1]).map(x => x[0]); };
   const frequent = () => { const u = usage(); return byUse(foods.filter(f => useN(u, f.id) > 0)).slice(0, 20); };
@@ -306,12 +309,28 @@
   // ---------- Open Food Facts ----------
   // база иногда отдаёт &quot; и т.п.; textarea раскодирует без выполнения разметки
   const unent = v => { const t = document.createElement("textarea"); t.innerHTML = String(v ?? ""); return t.value; };
-  const OFF_FIELDS = "code,product_name,product_name_ru,brands,nutriments,categories_tags";
+  const OFF_FIELDS = "code,product_name,product_name_ru,brands,nutriments,categories_tags,serving_quantity,product_quantity,quantity";
   function offMap(x){
     const n = x.nutriments || {};
     const name = unent(x.product_name_ru || x.product_name).trim();
     return {name, brand: unent(x.brands).split(",")[0].trim(), cat: guessCat(name, x.categories_tags), code: x.code,
-      kcal: n["energy-kcal_100g"] != null ? r1(n["energy-kcal_100g"]) : null, p: r1(n.proteins_100g), f: r1(n.fat_100g), c: r1(n.carbohydrates_100g)};
+      kcal: n["energy-kcal_100g"] != null ? r1(n["energy-kcal_100g"]) : null, p: r1(n.proteins_100g), f: r1(n.fat_100g), c: r1(n.carbohydrates_100g),
+      ...offPortion(x)};
+  }
+  // вес упаковки: product_quantity или текст quantity («140», «0.14» кг, «70г», «0,5 л»)
+  function packGrams(x){
+    if (num(x.product_quantity) > 0) return num(x.product_quantity);
+    const m = String(x.quantity || "").replace(",", ".").match(/^\s*([\d.]+)\s*(кг|kg|гр|г|g|л|l|мл|ml)?\.?\s*$/i); // только «число + единица», «1pcs» не считается
+    if (!m) return 0;
+    const v = num(m[1]), u = (m[2] || "").toLowerCase();
+    return u === "кг" || u === "kg" || u === "л" || u === "l" || (!u && v < 5) ? v * 1000 : v; // голое «0.14» — это килограммы
+  }
+  // порция по умолчанию: вся упаковка (до 1 кг), иначе порция производителя, если она не формальные 100 г
+  function offPortion(x){
+    const q = packGrams(x), s = num(x.serving_quantity);
+    if (q >= 10 && q <= 1000) return {pc: r1(q), pcName: "упаковка"};
+    if (s > 0 && s !== 100 && s < 1000) return {pc: r1(s), pcName: "порция"};
+    return {};
   }
   // база ограничивает частоту запросов: 503 приходит без CORS и выглядит как обрыв сети — повторяем
   async function offFetch(u, sig){
@@ -426,15 +445,61 @@
     $("manual").onclick = () => itemForm(null, meal);
   }
 
+  // блок «Сколько»: граммы или штуки (порции). В штуках вес 1 шт берётся из продукта или вводится тут же
+  const unitPref = id => usage()[id]?.u;
+  const PORTIONS = ["штука", "порция", "пачка", "упаковка", "стакан", "кусок", "ложка"];
+  const pcLabel = f => f.pcName || "штука";
+  function amountBox(food, startG, onChange){
+    let unit = (unitPref(food.id) === "pc" && food.pc) ? "pc" : "g";
+    let pc = num(food.pc) || 0;
+    const html = `<div class="chips seg two" id="aunit"><button class="chip" data-u="g">Граммы</button><button class="chip" data-u="pc">Порции</button></div>
+      <div class="amt-row"><label class="fld"><span id="alab"></span><input id="pg" inputmode="decimal"></label>
+        <label class="fld" id="apcw"><span>Вес 1 порции, г</span><input id="apc" inputmode="decimal" placeholder="напр. 134"></label></div>
+      <div class="chips" id="aquick"></div>
+      <div class="hint" id="anote"></div>`;
+    const val = () => num(String($("pg").value).replace(",", "."));
+    const grams = () => unit === "g" ? val() : val() * pc;
+    const paint = () => {
+      $("aunit").querySelectorAll(".chip").forEach(b => b.classList.toggle("on", b.dataset.u === unit));
+      const nm = pcLabel(food);
+      $("alab").textContent = unit === "g" ? "Сколько, г" : (nm === "штука" ? "Сколько, шт" : `Сколько (${nm})`);
+      $("apcw").hidden = unit === "g" || !!food.pc; // вес порции спрашиваем, только если он неизвестен
+      $("aquick").innerHTML = unit === "pc" ? [0.5, 1, 2, 3].map(n => `<button class="chip" data-n="${n}">${n === 0.5 ? "½" : n}</button>`).join("")
+        : (pc ? [1, 2].map(n => `<button class="chip" data-n="${n}">${n} ${esc(nm)} · ${fmt(pc * n)} г</button>`).join("") : "");
+      $("anote").textContent = unit === "pc" ? (pc ? `${fmt(val(), 1)} × ${nm} ${fmt(pc)} г = ${fmt(grams())} г` : "Укажи вес одной порции — дальше считай порциями") : "";
+      onChange();
+    };
+    const bind = () => {
+      $("pg").value = unit === "g" ? r1(startG) : (pc ? r1(startG / pc) : 1);
+      $("aunit").onclick = e => { const b = e.target.closest("[data-u]"); if (!b || b.dataset.u === unit) return;
+        const g0 = grams(); unit = b.dataset.u;
+        $("pg").value = unit === "g" ? r1(g0 || 100) : (pc ? r1(g0 / pc) || 1 : 1); paint(); };
+      $("aquick").onclick = e => { const b = e.target.closest("[data-n]"); if (!b) return;
+        $("pg").value = unit === "pc" ? b.dataset.n : r1(pc * b.dataset.n); paint(); };
+      $("pg").oninput = paint;
+      $("apc").oninput = () => { pc = num(String($("apc").value).replace(",", ".")); paint(); };
+      paint();
+    };
+    return {html, bind, grams, unit: () => unit, pcs: () => unit === "pc" ? r1(val()) : null, pc: () => pc};
+  }
+  // вес штуки, введённый при добавлении, запоминаем в продукте; единицу — на телефоне
+  function rememberUnit(food, box){
+    const u = usage(); if (food.id){ u[food.id] = {...(typeof u[food.id] === "object" ? u[food.id] : {n: useN(u, food.id)}), u: box.unit()}; localStorage.setItem(UKEY, JSON.stringify(u)); }
+    if (box.unit() === "pc" && box.pc() && !food.pc && food.id){
+      foods = foods.map(f => f.id === food.id ? {...f, pc: box.pc()} : f); food.pc = box.pc();
+      renderFoods(); saveFoods("вес 1 шт: " + food.name);
+    }
+  }
+
   function portionSheet(food, meal, fromBase){
     const pick = !meal; // пришли из «Моих продуктов»: приём выбирается здесь
     meal ||= guessMeal();
     const dayName = cur === todayIso() ? "сегодня" : ruDate(cur);
+    const box = amountBox(food, food.id ? defaultG(food) : food.pc || 100, () => show());
     openSheet(`<h2>${esc(food.name)}</h2>
       <div class="hint">${food.brand ? esc(food.brand) + " · " : ""}на 100 г: ${per100(food)}</div>
       ${pick ? `<div class="cap">Приём пищи · ${esc(dayName)}</div><div class="chips seg" id="pmeal">${MEALS.map(m => `<button class="chip${m === meal ? " on" : ""}" data-m="${m}">${m}</button>`).join("")}</div>` : ""}
-      <label class="fld"><span>Сколько, г</span><input id="pg" inputmode="decimal" value="${food.id ? defaultG(food) : food.pc || 100}"></label>
-      ${food.pc ? `<div class="chips">${[1,2,3].map(n => `<button class="chip" data-n="${n}">${n} шт</button>`).join("")}</div>` : ""}
+      ${box.html}
       <div class="res" id="pres"></div>
       ${fromBase ? `<label class="chk"><input type="checkbox" id="psave" checked> Сохранить в мои продукты</label>
         <label class="fld" id="pcatW"><span>Категория</span>${catSelect(food.cat || guessCat(food.name), "pcat")}</label>` : ""}
@@ -445,23 +510,25 @@
         $("pmeal").querySelectorAll(".chip").forEach(x => x.classList.toggle("on", x === b)); $("padd").textContent = "Добавить в " + meal.toLowerCase(); };
       if ($("pedit")) $("pedit").onclick = () => foodForm(food);
     }
-    const g = () => num(String($("pg").value).replace(",", "."));
+    const g = box.grams;
     const calc = () => { const k = g() / 100; return {kcal: Math.round(food.kcal * k), p: r1(food.p * k), f: r1(food.f * k), c: r1(food.c * k)}; };
-    const show = () => { const c = calc(); $("pres").innerHTML = `<b>${fmt(c.kcal)}</b> ккал · Б ${fmt(c.p,1)} · Ж ${fmt(c.f,1)} · У ${fmt(c.c,1)}`; };
-    show(); $("pg").oninput = show;
+    function show(){ if (!$("pres")) return; const c = calc(); $("pres").innerHTML = `<b>${fmt(c.kcal)}</b> ккал · Б ${fmt(c.p,1)} · Ж ${fmt(c.f,1)} · У ${fmt(c.c,1)}`; }
+    box.bind();
     if (fromBase) $("psave").onchange = e => $("pcatW").hidden = !e.target.checked;
-    $("sheetBody").querySelectorAll(".chip[data-n]").forEach(b => b.onclick = () => { $("pg").value = r1(food.pc * b.dataset.n); show(); });
     $("padd").onclick = () => {
-      if (!(g() > 0)) return $("pg").focus();
+      if (!(g() > 0)) return $(box.unit() === "pc" && !box.pc() ? "apc" : "pg").focus();
       let f = food;
       if (fromBase && $("psave").checked){
         f = {id: newId("f"), name: food.name, brand: food.brand, cat: $("pcat").value, kcal: food.kcal, p: food.p, f: food.f, c: food.c};
         if (food.code) f.code = food.code;
+        if (food.pc){ f.pc = food.pc; if (food.pcName) f.pcName = food.pcName; }
         if (!f.brand) delete f.brand;
         foods = [f, ...foods]; renderFoods(); saveFoods("новый продукт: " + f.name);
       }
       const out = {id: newId("m"), name: foodName(food), meal, time: nowTime(), g: r1(g()), ...calc()};
+      if (box.pcs()){ out.pcs = box.pcs(); out.pcName = pcLabel(food); }
       if (f.id) out.food = f.id;
+      rememberUnit(f.id ? f : food, box);
       closeSheet();
       addItem(out);
     };
@@ -546,7 +613,7 @@
     const list = (day.items || []).filter(it => (MEALS.includes(it.meal) ? it.meal : "Перекус") === m).sort((a,b) => String(a.time||"").localeCompare(String(b.time||"")));
     if (!list.length){ box.innerHTML = ""; return; }
     box.innerHTML = `<div class="cap row">Уже в ${esc(m.toLowerCase())}е<span>${fmt(list.reduce((s, x) => s + num(x.kcal), 0))} ккал</span></div>
-      <div class="list cur" id="mlist">${list.map(it => `<div class="swipe"><button class="del" data-del="${esc(it.id)}">Удалить</button><button class="item" data-id="${esc(it.id)}"><div class="nm"><div>${esc(it.name || "Без названия")}</div><small>${it.g?fmt(it.g)+" г · ":""}Б ${fmt(it.p)} · Ж ${fmt(it.f)} · У ${fmt(it.c)}</small></div><div class="kc">${fmt(it.kcal)}</div></button></div>`).join("")}</div>
+      <div class="list cur" id="mlist">${list.map(it => `<div class="swipe"><button class="del" data-del="${esc(it.id)}">Удалить</button><button class="item" data-id="${esc(it.id)}"><div class="nm"><div>${esc(it.name || "Без названия")}</div><small>${it.pcs ? `${fmt(it.pcs, 1)} × ${esc(it.pcName || "шт")} · ` : ""}${it.g?fmt(it.g)+" г · ":""}Б ${fmt(it.p)} · Ж ${fmt(it.f)} · У ${fmt(it.c)}</small></div><div class="kc">${fmt(it.kcal)}</div></button></div>`).join("")}</div>
       ${list.length > 1 ? `<button class="linkbtn" id="mcombo">Сохранить как моё блюдо</button>` : ""}`;
     if ($("mcombo")) $("mcombo").onclick = () => comboSheet(list, m);
     $("mlist").onclick = e => {
@@ -858,24 +925,27 @@
     const per = prod ? {kcal: prod.kcal / 100, p: prod.p / 100, f: prod.f / 100, c: prod.c / 100}
                      : {kcal: it.kcal / it.g, p: num(it.p) / it.g, f: num(it.f) / it.g, c: num(it.c) / it.g};
     let meal = MEALS.includes(it.meal) ? it.meal : "Перекус";
+    const unitSrc = prod || {pc: it.pcs ? it.g / it.pcs : 0, pcName: it.pcName};
+    const box = amountBox(unitSrc, it.g, () => show());
     openSheet(`<h2>${esc(it.name)}</h2>
       <div class="chips seg" id="emeal">${MEALS.map(m => `<button class="chip${m === meal ? " on" : ""}" data-m="${m}">${m}</button>`).join("")}</div>
-      <label class="fld"><span>Сколько, г</span><input id="eg" inputmode="decimal" value="${r1(it.g)}"></label>
-      ${prod?.pc ? `<div class="chips">${[1,2,3].map(n => `<button class="chip" data-n="${n}">${n} шт</button>`).join("")}</div>` : ""}
+      ${box.html}
       <div class="res" id="eres"></div>
       <button class="btn" id="esave">Сохранить</button>
       <button class="btn ghost" id="emanual">Править вручную</button>
       <button class="btn danger" id="edel">Удалить</button>`);
-    const g = () => num(String($("eg").value).replace(",", "."));
+    const g = box.grams;
     const calc = () => ({kcal: Math.round(per.kcal * g()), p: r1(per.p * g()), f: r1(per.f * g()), c: r1(per.c * g())});
-    const show = () => { const c = calc(); $("eres").innerHTML = `<b>${fmt(c.kcal)}</b> ккал · Б ${fmt(c.p,1)} · Ж ${fmt(c.f,1)} · У ${fmt(c.c,1)}`; };
-    show(); $("eg").oninput = show;
+    function show(){ if (!$("eres")) return; const c = calc(); $("eres").innerHTML = `<b>${fmt(c.kcal)}</b> ккал · Б ${fmt(c.p,1)} · Ж ${fmt(c.f,1)} · У ${fmt(c.c,1)}`; }
+    box.bind();
     $("emeal").onclick = e => { const b = e.target.closest("[data-m]"); if (!b) return; meal = b.dataset.m; $("emeal").querySelectorAll(".chip").forEach(x => x.classList.toggle("on", x === b)); };
-    $("sheetBody").querySelectorAll(".chip[data-n]").forEach(b => b.onclick = () => { $("eg").value = r1(prod.pc * b.dataset.n); show(); });
     $("esave").onclick = () => {
-      if (!(g() > 0)) return $("eg").focus();
+      if (!(g() > 0)) return $("pg").focus();
+      if (prod) rememberUnit(prod, box);
+      const upd = {...it, meal, g: r1(g()), ...calc()};
+      if (box.pcs()){ upd.pcs = box.pcs(); upd.pcName = pcLabel(unitSrc); } else { delete upd.pcs; delete upd.pcName; }
       closeSheet();
-      mutate({t: "put", item: {...it, meal, g: r1(g()), ...calc()}}, `правка: ${it.name} ${r1(g())} г`);
+      mutate({t: "put", item: upd}, `правка: ${it.name} ${r1(g())} г`);
     };
     $("emanual").onclick = () => itemForm(it);
     $("edel").onclick = () => { closeSheet(); removeItem(it); };

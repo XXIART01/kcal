@@ -648,3 +648,12 @@ section:not([hidden])>*{animation:rise .55s var(--ease-ios) both}
 #acur .list.cur{margin-bottom:4px}
 .linkbtn{display:block;margin:0 0 12px;padding:8px 0;font-size:14px;color:rgba(235,235,245,.7)}
 #acur:not(:empty){padding-bottom:4px;margin-bottom:12px;border-bottom:1px solid var(--line)}
+
+/* граммы / штуки */
+.chips.seg.two{grid-template-columns:1fr 1fr}
+.amt-row{display:flex;gap:10px}
+.amt-row .fld{flex:1;min-width:0}
+#aquick{margin:-4px 0 8px}
+#aquick:empty{display:none}
+#anote{margin:0 0 4px}
+#anote:empty{display:none}
