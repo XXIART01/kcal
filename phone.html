@@ -34,6 +34,16 @@
     const w = f.contentWindow;
     w.document.querySelectorAll("link[rel=stylesheet]").forEach(l => l.href = l.href.split("?")[0] + "?v=" + Date.now()); // и стили свежие
     const p = n => String(n).padStart(2, "0"), iso = d => `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;
+    // ?real — настоящие данные: копия kcal-data в .claude/real-data (не попадает в git); правки только в памяти, на GitHub не уходят
+    const real = new URLSearchParams(location.search).has("real");
+    if (real){
+      const db = {}, load = async k => { if (!(k in db)) db[k] = await fetch(".claude/real-data/" + k, {cache: "no-store"}).then(r => r.ok ? r.json() : undefined); return db[k]; };
+      w.__mock = {hasToken: () => true, read: async k => (await load(k)) ? {data: structuredClone(db[k])} : null,
+        update: async (k, fn) => (await load(k), db[k] = fn(db[k]), db[k]), clearToken(){}, check: async () => {}};
+      w.eval("Object.assign(Store, __mock)");
+      w.eval(await (await fetch("js/app.js", {cache: "no-store"})).text());
+      return;
+    }
     const db = {"settings.json": {kcal: 1900, p: 160, f: 60, c: 180, water: 1500}};
     // foods.json нет — приложение само положит базовый набор (33 продукта, все категории)
     db["measures.json"] = [0, 14, 28].map((ago, i) => { const d = new Date(); d.setDate(d.getDate() - (28 - ago)); return {date: iso(d), waist: 96 - i * 1.2, hips: 104 - i * 0.6, chest: 106 - i * 0.4, arm: 36 + i * 0.2, thigh: 60 - i * 0.5}; });
