@@ -1,6 +1,6 @@
 (() => {
   // ---------- constants ----------
-  const VERSION = 37;
+  const VERSION = 39;
   // отладка вёрстки: ?iphone — зоны iPhone 13, ?grid — сетка и размеры блоков
   if (/[?&]iphone/.test(location.search)) document.documentElement.classList.add("sim-iphone");
   if (/[?&]grid/.test(location.search)) addEventListener("load", () => document.head.appendChild(Object.assign(document.createElement("script"), {src: "js/grid.js"})));
@@ -131,7 +131,8 @@
   const per100 = f => `${fmt(f.kcal)} ккал · Б ${fmt(f.p,1)} · Ж ${fmt(f.f,1)} · У ${fmt(f.c,1)}`;
   // как продукт называется везде: «Творог 5% · Простоквашино» (без фирмы семь творогов не различить)
   const foodName = f => f.brand ? `${f.name} · ${f.brand}` : f.name;
-  const storeTag = f => f.store ? `<span class="tag">${esc(f.store)}</span>` : "";
+  // метки под названием: магазин; «без фирмы» — у общих справочных продуктов, чтобы не путать с конкретными
+  const storeTag = f => (f.store ? `<span class="tag">${esc(f.store)}</span>` : "") + (!f.brand && f.kcal != null && !f.code ? `<span class="tag dim">без фирмы</span>` : "");
   const STORES = ["Пятёрочка", "Перекрёсток", "Самокат", "ВкусВилл", "Магнит", "Лента", "Ашан", "Яндекс Лавка", "Озон фреш"];
   // все слова запроса есть в названии или бренде
   // все слова запроса есть в названии, фирме или магазине (ё = е)
@@ -192,7 +193,8 @@
     for (const [c, re] of CAT_WORDS) if (re.test(s)) return c;
     return "Другое";
   }
-  const catOf = f => CATS.includes(f.cat) ? f.cat : guessCat(f.name);
+  // «Другое» — только если по названию не угадывается ничего лучше (творог всегда в молочке)
+  const catOf = f => CATS.includes(f.cat) && f.cat !== "Другое" ? f.cat : guessCat(f.name);
   const catSelect = (sel, id) => `<select ${id ? `id="${id}"` : 'name="cat"'}>${CATS.map(c => `<option${c === sel ? " selected" : ""}>${c}</option>`).join("")}</select>`;
 
   let foodCat = "";
@@ -255,7 +257,7 @@
     form.onsubmit = e => {
       e.preventDefault();
       const fd = new FormData(form), n = k => r1(String(fd.get(k) ?? "").replace(",", "."));
-      const out = {id: f?.id || newId("f"), name: String(fd.get("name")).trim(), brand: String(fd.get("brand")).trim(), store: String(fd.get("store") || "").trim(), cat: fd.get("cat"), kcal: n("kcal"), p: n("p"), f: n("f"), c: n("c")};
+      const out = {id: f?.id || newId("f"), name: String(fd.get("name")).trim(), brand: String(fd.get("brand")).trim(), store: String(fd.get("store") || "").trim(), cat: !touched && fd.get("cat") === "Другое" ? guessCat(fd.get("name")) : fd.get("cat"), kcal: n("kcal"), p: n("p"), f: n("f"), c: n("c")};
       if (n("pc") > 0){ out.pc = n("pc"); if (fd.get("pcName") !== "штука") out.pcName = fd.get("pcName"); }
       if (f?.code) out.code = f.code;
       if (!out.brand) delete out.brand;
@@ -539,8 +541,8 @@
       if (box.pcs()){ out.pcs = box.pcs(); out.pcName = pcLabel(food); }
       if (f.id) out.food = f.id;
       rememberUnit(f.id ? f : food, box);
-      closeSheet();
       addItem(out);
+      if (pick) closeSheet(); else addSheet(meal); // пришли из окна приёма — возвращаемся туда же
     };
   }
 
@@ -555,6 +557,7 @@
   ).then(BD => new BD({formats: ["ean_13", "ean_8", "upc_a", "upc_e"]})).catch(e => { detP = null; throw e; });
 
   function scanSheet(meal){
+    const pickMeal = !meal; // открыли из шапки — приём выберем в окне граммов
     meal ||= guessMeal();
     openSheet(`<h2>Штрихкод</h2>
       <div class="scan"><video id="sv" playsinline muted></video><div class="scan-frame"></div></div>
@@ -568,13 +571,13 @@
       if (!alive) return;
       stopScan?.();
       const mine = foods.find(f => f.code === code);
-      if (mine) return portionSheet(mine, meal, false);
+      if (mine) return portionSheet(mine, pickMeal ? null : meal, false);
       openSheet(`<h2>Штрихкод ${esc(code)}</h2><div class="empty">Ищу в базе…</div>`);
       let p = null;
       try { p = await offByCode(code); }
       catch { return openSheet(`<h2>Штрихкод ${esc(code)}</h2><div class="empty">База не ответила. Проверь интернет и попробуй ещё раз.</div><button class="btn" id="sretry">Повторить</button>`), $("sretry").onclick = () => { alive = true; found(code); }; }
-      const done = f => portionSheet(f, meal, false);
-      if (p && p.kcal != null) return portionSheet(p, meal, true);
+      const done = f => portionSheet(f, pickMeal ? null : meal, false);
+      if (p && p.kcal != null) return portionSheet(p, pickMeal ? null : meal, true);
       foodForm(p ? {...p, id: undefined} : {code}, done); // нет в базе или нет калорий — заполнить с упаковки
     }
     (async () => {
@@ -631,7 +634,8 @@
       if (del) return removeItem(day.items.find(x => x.id === del.dataset.del));
       const row = e.target.closest(".swipe");
       if (row?.classList.contains("open")) return row.classList.remove("open"); // тап по открытой строке — закрыть
-      const b = e.target.closest(".item"); if (b) itemDetails(b.dataset.id);
+      const b = e.target.closest(".item"); if (!b) return;
+      const it = day.items.find(x => x.id === b.dataset.id); if (it) it.g > 0 ? portionEdit(it) : itemForm(it);
     };
     swipeRows($("mlist"));
   }
@@ -957,11 +961,11 @@
       if (prod) rememberUnit(prod, box);
       const upd = {...it, meal, g: r1(g()), ...calc()};
       if (box.pcs()){ upd.pcs = box.pcs(); upd.pcName = pcLabel(unitSrc); } else { delete upd.pcs; delete upd.pcName; }
-      closeSheet();
       mutate({t: "put", item: upd}, `правка: ${it.name} ${r1(g())} г`);
+      addSheet(meal);
     };
     $("emanual").onclick = () => itemForm(it);
-    $("edel").onclick = () => { closeSheet(); removeItem(it); };
+    $("edel").onclick = () => { removeItem(it); addSheet(MEALS.includes(it.meal) ? it.meal : "Перекус"); };
   }
 
   function settingsSheet(){
