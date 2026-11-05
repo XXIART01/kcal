@@ -674,3 +674,4 @@ section:not([hidden])>*{animation:rise .55s var(--ease-ios) both}
 .badge:empty{display:none}
 /* окно приёма пищи — фиксированной высоты, без прыжков при смене раздела */
 .sheet.tall{height:88vh;height:88dvh}
+.linkbtn.inline{display:inline;margin:0;padding:0;color:#fff;text-decoration:underline;text-underline-offset:3px}

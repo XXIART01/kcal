@@ -1,6 +1,6 @@
 (() => {
   // ---------- constants ----------
-  const VERSION = 43;
+  const VERSION = 44;
   // отладка вёрстки: ?iphone — зоны iPhone 13, ?grid — сетка и размеры блоков
   if (/[?&]iphone/.test(location.search)) document.documentElement.classList.add("sim-iphone");
   if (/[?&]grid/.test(location.search)) addEventListener("load", () => document.head.appendChild(Object.assign(document.createElement("script"), {src: "js/grid.js"})));
@@ -395,10 +395,9 @@
     setTimeout(() => $("sheet").classList.add("tall"));
     openSheet(`<h2>${esc(meal)}</h2>
       <div id="acur"></div>
-      <div class="search-row"><input class="search" id="aq" type="search" placeholder="Ряженка, творог, банан…" autocomplete="off"><button class="round" id="ascan" aria-label="Сканировать штрихкод">${SCAN_ICON}</button></div>
+      <div class="search-row"><input class="search" id="aq" type="search" placeholder="Ряженка, творог, банан…" autocomplete="off"><button class="round" id="ascan" aria-label="Сканировать штрихкод">${SCAN_ICON}</button><button class="round" id="manual" aria-label="Ввести вручную"><svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16zM14 6l4 4"/></svg></button></div>
       <div class="chips scroll" id="asec"></div>
-      <div id="ares"></div>
-      <button class="btn ghost" id="manual">Ввести вручную</button>`);
+      <div id="ares"></div>`);
     // раздел по умолчанию: избранное, иначе недавние, иначе все
     let sec = frequent(meal).length ? "freq" : foods.some(f => f.fav) ? "fav" : rec.length ? "rec" : "all";
     const drawSecs = () => {
@@ -431,7 +430,7 @@
       if (mine.length) h += `<div class="cap">Мои продукты</div><div class="list">${mine.map(quickRow).join("")}</div>`;
       if (q.length >= 2) h += `<div class="cap">База Open Food Facts</div>` + (st === "load" ? `<div class="empty">Ищу…</div>`
         : st === "err" ? `<div class="empty">База не ответила. Попробуй ещё раз или введи вручную.</div>`
-        : off.length ? `<div class="list">${off.map((f, i) => foodRow(f, `data-off="${i}"`)).join("")}</div>` : `<div class="empty">В базе не нашлось</div>`);
+        : off.length ? `<div class="list">${off.map((f, i) => foodRow(f, `data-off="${i}"`)).join("")}</div>` : `<div class="empty">В базе не нашлось · <button class="linkbtn inline" data-manual>Ввести вручную</button></div>`);
       if (!h) h = `<div class="empty">Начни вводить название или отсканируй штрихкод</div>`;
       $("ares").innerHTML = h; drawSecs(); renderCur();
       if ($("acombos")) swipeRows($("acombos"));
@@ -466,6 +465,7 @@
     };
     $("ascan").onclick = () => scanSheet(meal);
     $("manual").onclick = () => itemForm(null, meal);
+    $("ares").addEventListener("click", e => { if (e.target.closest("[data-manual]")) itemForm(null, meal); });
   }
 
   // блок «Сколько»: граммы или штуки (порции). В штуках вес 1 шт берётся из продукта или вводится тут же
