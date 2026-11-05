@@ -36,6 +36,7 @@
     const p = n => String(n).padStart(2, "0"), iso = d => `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;
     const db = {"settings.json": {kcal: 1900, p: 160, f: 60, c: 180, water: 1500}};
     // foods.json нет — приложение само положит базовый набор (33 продукта, все категории)
+    db["measures.json"] = [0, 14, 28].map((ago, i) => { const d = new Date(); d.setDate(d.getDate() - (28 - ago)); return {date: iso(d), waist: 96 - i * 1.2, hips: 104 - i * 0.6, chest: 106 - i * 0.4, arm: 36 + i * 0.2, thigh: 60 - i * 0.5}; });
     db["weights.json"] = Array.from({length: 24}, (_, i) => { const d = new Date(); d.setDate(d.getDate() - (23 - i) * 2); return {date: iso(d), kg: Math.round((89.6 - i * 0.07 + Math.sin(i * 1.7) * 0.45) * 10) / 10}; });
     for (let i = 2; i < 4; i++){ const d = new Date(); d.setDate(d.getDate() - i); db[`days/${iso(d)}.json`] = {items: [{id: "x", kcal: 1200 + i * 300}]}; }
     // пример дня — вчера (среда): Б 180 · Ж 70 · У 210 — все три выше нормы

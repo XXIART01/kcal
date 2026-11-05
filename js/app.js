@@ -1,6 +1,6 @@
 (() => {
   // ---------- constants ----------
-  const VERSION = 47;
+  const VERSION = 48;
   // iOS отдаёт выбранный в настройках размер текста через системный шрифт -apple-system-body (17 px по умолчанию):
   // масштабируем интерфейс тем же коэффициентом, но не больше 1,3 — иначе главный экран перестанет помещаться
   (() => { const p = document.createElement("span"); p.style.font = "-apple-system-body"; p.style.position = "absolute"; p.style.visibility = "hidden"; p.textContent = "a";
@@ -56,6 +56,7 @@
   let goals = structuredClone(DEFAULT_GOALS);
   let sups = defaultSups();
   let weights = []; // [{date, kg}] — вес по дням, по возрастанию даты
+  let measures = []; // [{date, waist, hips, chest, arm, thigh, neck}] — замеры тела, см
   let combos = []; // мои блюда: {id, name, items:[порции без id/meal/time]}
   let foods = []; // мои продукты: {id, name, brand, kcal, p, f, c — на 100 г, pc — вес 1 шт в г}
   let weekDocs = {};
@@ -643,17 +644,19 @@
   // тренд веса — сглаживание (как в «умных» весах): не скачет от воды и соли
   const trendOf = list => { let t = null; return list.map(w => (t = t == null ? w.kg : t + 0.25 * (w.kg - t))); };
   const kgFmt = v => fmt(v, 1).replace(".", ",");
+  // «+0,4» / «−1,2» / «0» — без «−0» из-за округления
+  const signed = v => { const r = Math.round(v * 10) / 10; return r === 0 ? "0" : (r > 0 ? "+" : "−") + kgFmt(Math.abs(r)); };
   function weightAt(daysAgo){ const d = addDays(todayIso(), -daysAgo); let r = null; for (const w of weights) if (w.date <= d) r = w; return r; }
 
   function renderWeight(){
     const box = $("wCard"); if (!box) return;
     if (!weights.length){
       box.innerHTML = `<div class="cap">Вес</div><div class="empty">Добавь вес — здесь появится график и тренд</div><button class="btn" id="wAdd">Записать вес</button>`;
-      return void ($("wAdd").onclick = weightSheet);
+      return void ($("wAdd").onclick = () => weightSheet());
     }
     const list = weights.slice(-60), tr = trendOf(list), last = list[list.length - 1], tNow = tr[tr.length - 1];
     const ago = weightAt(30), diff = ago && ago.date !== last.date ? last.kg - ago.kg : null;
-    const goal = num(goals.weightGoal);
+    const goal = num(goals.weightGoal), rate = weeklyRate();
     // график: точки — замеры, линия — тренд
     const W = 300, Hh = 110, pad = 6, vals = [...list.map(w => w.kg), ...tr, ...(goal ? [goal] : [])];
     const lo = Math.min(...vals) - 0.5, hi = Math.max(...vals) + 0.5;
@@ -662,33 +665,99 @@
     const line = tr.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join("");
     box.innerHTML = `<div class="cap row">Вес<button class="linkbtn inline" id="wAdd">+ Записать</button></div>
       <div class="wrow"><b class="big2">${kgFmt(last.kg)}<small> кг</small></b>
-        <span class="wmeta">${diff != null ? `<em class="${diff <= 0 ? "down" : "up"}">${diff > 0 ? "+" : diff < 0 ? "−" : ""}${kgFmt(Math.abs(diff))} кг</em> за 30 дней<br>` : ""}тренд ${kgFmt(tNow)} кг${goal ? ` · до цели ${kgFmt(Math.max(0, tNow - goal))} кг` : ""}</span></div>
+        <span class="wmeta">${diff != null ? `<em class="${diff <= 0 ? "down" : "up"}">${signed(diff)} кг</em> за 30 дней<br>` : ""}тренд ${kgFmt(tNow)} кг${rate != null ? ` · ${signed(rate)} кг/нед` : ""}${goal ? `<br>до цели ${kgFmt(Math.max(0, tNow - goal))} кг${rate < 0 && tNow > goal ? ` · ≈ ${Math.ceil((tNow - goal) / -rate)} нед.` : ""}` : ""}</span></div>
       <svg class="wchart" viewBox="0 0 ${W} ${Hh}" preserveAspectRatio="none" role="img" aria-label="График веса: сейчас ${kgFmt(last.kg)} кг, тренд ${kgFmt(tNow)} кг">
         ${goal ? `<line x1="0" x2="${W}" y1="${y(goal)}" y2="${y(goal)}" class="goal"/>` : ""}
         <path d="${line}" class="trend"/>
         ${list.map((w, i) => `<circle cx="${x(i).toFixed(1)}" cy="${y(w.kg).toFixed(1)}" r="2.6" class="pt"/>`).join("")}
       </svg>
-      <div class="wlegend"><span><i class="pt"></i>замеры</span><span><i class="tr"></i>тренд</span>${goal ? `<span><i class="gl"></i>цель ${kgFmt(goal)}</span>` : ""}</div>`;
-    $("wAdd").onclick = weightSheet;
+      <div class="wlegend"><span><i class="pt"></i>замеры</span><span><i class="tr"></i>тренд</span>${goal ? `<span><i class="gl"></i>цель ${kgFmt(goal)}</span>` : ""}</div>
+      <div class="whist">${weights.slice(-5).reverse().map(w => `<button class="whrow" data-wd="${w.date}"><span>${esc(w.date === todayIso() ? "Сегодня" : ruDate(w.date))}</span><b>${kgFmt(w.kg)} кг</b></button>`).join("")}</div>`;
+    $("wAdd").onclick = () => weightSheet();
+    box.querySelector(".whist").onclick = e => { const b = e.target.closest("[data-wd]"); if (b) weightSheet(weights.find(w => w.date === b.dataset.wd)); };
   }
 
-  function weightSheet(){
-    const last = weights[weights.length - 1], today = weights.find(w => w.date === todayIso());
-    openSheet(`<h2>Вес сегодня</h2>
-      <form id="wForm2"><label class="fld"><span>Вес, кг</span><input id="wkg" inputmode="decimal" value="${today ? kgFmt(today.kg) : last ? kgFmt(last.kg) : ""}" placeholder="88,4" required></label>
-      <label class="fld"><span>Цель, кг (необязательно)</span><input id="wgoal" inputmode="decimal" value="${goals.weightGoal ? kgFmt(goals.weightGoal) : ""}" placeholder="80"></label>
-      <div class="hint">Лучше взвешиваться утром натощак. Тренд сглаживает скачки от воды и соли.</div>
-      <button class="btn" type="submit">Сохранить</button></form>`);
+  // запись веса за любую дату (по умолчанию — сегодня); тот же день — заменяется; можно удалить
+  function weightSheet(entry){
+    const last = weights[weights.length - 1], date = entry?.date || todayIso(), same = weights.find(w => w.date === date);
+    openSheet(`<h2>${entry ? "Вес" : "Записать вес"}</h2>
+      <form id="wForm2">
+        <div class="grid2"><label class="fld"><span>Дата</span><input id="wdate" type="date" max="${todayIso()}" value="${date}" required></label>
+          <label class="fld"><span>Вес, кг</span><input id="wkg" inputmode="decimal" value="${same ? kgFmt(same.kg) : last ? kgFmt(last.kg) : ""}" placeholder="88,4" required></label></div>
+        <label class="fld"><span>Цель, кг (необязательно)</span><input id="wgoal" inputmode="decimal" value="${goals.weightGoal ? kgFmt(goals.weightGoal) : ""}" placeholder="80"></label>
+        <div class="hint">Лучше взвешиваться утром натощак. Забыли вчера — выберите вчерашнюю дату.</div>
+        <button class="btn" type="submit">Сохранить</button>
+        ${entry ? `<button class="btn danger" type="button" id="wdel">Удалить запись</button>` : ""}
+      </form>`);
+    // при смене даты подставляем вес за этот день, если он уже записан
+    $("wdate").onchange = () => { const w = weights.find(x => x.date === $("wdate").value); if (w) $("wkg").value = kgFmt(w.kg); };
     $("wForm2").onsubmit = e => {
       e.preventDefault();
-      const kg = r1(String($("wkg").value).replace(",", ".")), g = r1(String($("wgoal").value).replace(",", "."));
+      const d = $("wdate").value || todayIso(), kg = r1(String($("wkg").value).replace(",", ".")), g = r1(String($("wgoal").value).replace(",", "."));
       if (!(kg > 20 && kg < 400)) return $("wkg").focus();
-      weights = [...weights.filter(w => w.date !== todayIso()), {date: todayIso(), kg}].sort((a, b) => a.date.localeCompare(b.date));
-      saveConf("weights.json", weights, `вес ${kg} кг`);
+      if (d > todayIso()) return $("wdate").focus();
+      weights = [...weights.filter(w => w.date !== d && w.date !== entry?.date), {date: d, kg}].sort((a, b) => a.date.localeCompare(b.date));
+      saveConf("weights.json", weights, `вес ${d}: ${kg} кг`);
       if ((g || 0) !== (goals.weightGoal || 0)){ goals = {...goals, weightGoal: g > 0 ? g : undefined}; saveConf("settings.json", goals, "цель по весу"); }
-      closeSheet(); renderWeight(); toast(`Вес записан: ${kgFmt(kg)} кг`);
+      closeSheet(); renderProg(); toast(`Вес ${kgFmt(kg)} кг — ${d === todayIso() ? "сегодня" : ruDate(d)}`);
     };
-    setTimeout(() => $("wkg")?.select(), 350);
+    if (entry) $("wdel").onclick = () => {
+      const old = weights; weights = weights.filter(w => w.date !== entry.date); saveConf("weights.json", weights, `удалён вес ${entry.date}`);
+      closeSheet(); renderProg(); toast(`Удалено: вес ${ruDate(entry.date)}`, "Отменить", () => { weights = old; saveConf("weights.json", weights, "возвращён вес"); renderProg(); });
+    };
+    if (!entry) setTimeout(() => $("wkg")?.select(), 350);
+  }
+
+  // скорость по тренду: кг в неделю за последние ~2 недели
+  function weeklyRate(){
+    if (weights.length < 3) return null;
+    const tr = trendOf(weights), lastD = weights[weights.length - 1].date, from = addDays(lastD, -14);
+    let i0 = weights.findIndex(w => w.date >= from); if (i0 < 0 || i0 >= weights.length - 1) return null;
+    const days = (parseIso(lastD) - parseIso(weights[i0].date)) / 864e5; if (days < 5) return null;
+    return (tr[tr.length - 1] - tr[i0]) / days * 7;
+  }
+
+  // ---------- замеры тела ----------
+  const MEAS = [["waist", "Талия"], ["hips", "Бёдра"], ["chest", "Грудь"], ["arm", "Бицепс"], ["thigh", "Бедро"], ["neck", "Шея"]];
+  const spark = (vals, cls) => { if (vals.length < 2) return ""; const lo = Math.min(...vals), hi = Math.max(...vals), r = hi - lo || 1;
+    return `<svg class="spark ${cls}" viewBox="0 0 60 18" preserveAspectRatio="none" aria-hidden="true"><path d="${vals.map((v, i) => `${i ? "L" : "M"}${(i * 60 / (vals.length - 1)).toFixed(1)},${(16 - (v - lo) / r * 14).toFixed(1)}`).join("")}"/></svg>`; };
+  function renderMeasures(){
+    const box = $("measCard"); if (!box) return;
+    if (!measures.length){
+      box.innerHTML = `<div class="cap row">Замеры тела<button class="linkbtn inline" id="mAdd">+ Записать</button></div><div class="empty">Талия, бёдра, грудь, бицепс, бедро, шея — раз в 1–2 недели, утром</div>`;
+      return void ($("mAdd").onclick = () => measSheet());
+    }
+    const last = measures[measures.length - 1];
+    const rows = MEAS.map(([k, n]) => {
+      const vals = measures.filter(m => m[k] > 0), cur = vals[vals.length - 1];
+      if (!cur) return "";
+      const first = vals[0], d = cur[k] - first[k];
+      return `<div class="mrow"><span>${n}</span>${spark(vals.map(m => m[k]), d <= 0 ? "down" : "up")}<b>${fmt(cur[k], 1)}<small> см</small></b><em class="${d < 0 ? "down" : d > 0 ? "up" : ""}">${vals.length > 1 ? signed(d) : "—"}</em></div>`;
+    }).join("");
+    box.innerHTML = `<div class="cap row">Замеры тела<button class="linkbtn inline" id="mAdd">+ Записать</button></div>
+      <div class="hint">Последний раз — ${esc(ruDate(last.date))}. Изменение — с первого замера${measures.length > 1 ? ` (${esc(ruDate(measures[0].date))})` : ""}.</div>
+      <div class="mlist">${rows}</div>
+      ${measures.length ? `<button class="linkbtn" id="mEdit">Изменить последний замер</button>` : ""}`;
+    $("mAdd").onclick = () => measSheet();
+    $("mEdit").onclick = () => measSheet(last);
+  }
+  function measSheet(entry){
+    const last = measures[measures.length - 1] || {}, src = entry || last, date = entry?.date || todayIso();
+    openSheet(`<h2>Замеры тела</h2>
+      <form id="mForm"><label class="fld"><span>Дата</span><input id="mdate" type="date" max="${todayIso()}" value="${date}" required></label>
+      <div class="grid2">${MEAS.map(([k, n]) => `<label class="fld"><span>${n}, см</span><input name="${k}" inputmode="decimal" value="${src[k] ? fmt(src[k], 1) : ""}" placeholder="${last[k] ? fmt(last[k], 1) : "—"}"></label>`).join("")}</div>
+      <div class="hint">Мерить утром, на одном и том же месте: талия — по пупку, бёдра — по самой широкой части. Можно заполнить не все.</div>
+      <button class="btn" type="submit">Сохранить</button>
+      ${entry ? `<button class="btn danger" type="button" id="mdel">Удалить замер</button>` : ""}</form>`);
+    $("mForm").onsubmit = e => {
+      e.preventDefault();
+      const fd = new FormData(e.target), d = $("mdate").value || todayIso(), m = {date: d};
+      MEAS.forEach(([k]) => { const v = r1(String(fd.get(k) || "").replace(",", ".")); if (v > 0) m[k] = v; });
+      if (Object.keys(m).length < 2) return e.target.querySelector("input[name]").focus();
+      measures = [...measures.filter(x => x.date !== d && x.date !== entry?.date), m].sort((a, b) => a.date.localeCompare(b.date));
+      saveConf("measures.json", measures, `замеры ${d}`); closeSheet(); renderMeasures(); toast("Замеры записаны");
+    };
+    if (entry) $("mdel").onclick = () => { measures = measures.filter(x => x.date !== entry.date); saveConf("measures.json", measures, `удалён замер ${entry.date}`); closeSheet(); renderMeasures(); };
   }
 
   // неделя: 7 дней до сегодня; пустые дни (без записей) в средние не входят
@@ -721,7 +790,34 @@
           return `<div class="wb${x.d === todayIso() ? " today" : ""}" title="${fmt(x.t.kcal)} ккал"><div class="col" style="height:${gh}%"></div>${over ? `<div class="col ov" style="height:${h - gh}%;bottom:${gh}%"></div>` : ""}<span>${esc(parseIso(x.d).toLocaleDateString("ru-RU", {weekday: "short"}))}</span></div>`; }).join("")}
       </div>`;
   }
-  const renderProg = () => { renderWeight(); renderWeekStats(); };
+  // последние 6 недель (пн–вс): средние калории по дням с записями, средний вес и изменение к прошлой неделе
+  async function renderWeeks(){
+    const box = $("weeksCard"); if (!box) return;
+    const t = todayIso(), wd = (parseIso(t).getDay() + 6) % 7, mon0 = addDays(t, -wd);
+    const weeks = Array.from({length: 6}, (_, i) => addDays(mon0, -7 * i));
+    const allDays = weeks.flatMap(m => Array.from({length: 7}, (_, i) => addDays(m, i))).filter(d => d <= t);
+    const need = allDays.filter(d => !(d === cur ? day : weekDocs[d]));
+    if (need.length){
+      box.innerHTML = `<div class="cap">По неделям</div><div class="empty">Считаю…</div>`;
+      const got = await Promise.all(need.map(d => Store.read(dayPath(d)).then(r => r?.data || {items: []}, () => null)));
+      need.forEach((d, i) => { if (got[i]) weekDocs[d] = got[i]; });
+    }
+    let prevW = null;
+    const rows = weeks.slice().reverse().map(m => {
+      const ds = Array.from({length: 7}, (_, i) => addDays(m, i)).filter(d => d <= t);
+      const ks = ds.map(d => totals((d === cur ? day : weekDocs[d])?.items).kcal).filter(k => k > 0);
+      const ws = weights.filter(w => w.date >= m && w.date <= addDays(m, 6)).map(w => w.kg);
+      const avgK = ks.length ? ks.reduce((a, b) => a + b, 0) / ks.length : null, avgW = ws.length ? ws.reduce((a, b) => a + b, 0) / ws.length : null;
+      const dW = avgW != null && prevW != null ? avgW - prevW : null; if (avgW != null) prevW = avgW;
+      return {m, avgK, avgW, dW, n: ks.length};
+    }).reverse().filter(r => r.avgK != null || r.avgW != null);
+    box.innerHTML = `<div class="cap">По неделям</div>` + (rows.length ? `<div class="wtab"><div class="wth"><span>Неделя</span><span>Ккал/день</span><span>Вес</span><span>±</span></div>
+      ${rows.map(r => `<div class="wtr"><span>${esc(parseIso(r.m).toLocaleDateString("ru-RU", {day: "numeric", month: "short"}))}${r.m === mon0 ? " · эта" : ""}</span>
+        <span class="${r.avgK > goals.kcal * 1.05 ? "over" : ""}">${r.avgK != null ? fmt(r.avgK) : "—"}</span><span>${r.avgW != null ? kgFmt(r.avgW) : "—"}</span>
+        <span class="${r.dW < 0 ? "down" : r.dW > 0 ? "up" : ""}">${r.dW != null ? signed(r.dW) : "—"}</span></div>`).join("")}</div>
+      <div class="hint">Калории — среднее по дням с записями; вес — среднее за неделю; ± — к прошлой неделе.</div>` : `<div class="empty">Появится, когда будут записи за несколько недель</div>`);
+  }
+  const renderProg = () => { renderWeight(); renderMeasures(); renderWeekStats(); renderWeeks(); };
 
   // нажатие на приём пищи и «+» открывают одно окно (раньше было два шага)
   function mealSheet(m){ addSheet(m); }
@@ -1241,7 +1337,7 @@
       if (day.date) weekDocs[day.date] = day;
       // держим только дни около текущего, чтобы кэш не рос
       const keep = Object.fromEntries(Object.entries(weekDocs).filter(([k]) => Math.abs(parseIso(k) - parseIso(cur)) <= 10 * 864e5));
-      localStorage.setItem(CKEY, JSON.stringify({goals, sups, foods, combos, weights, days: keep}));
+      localStorage.setItem(CKEY, JSON.stringify({goals, sups, foods, combos, weights, measures, days: keep}));
     } catch {}
   }
   function readCache(){ try { return JSON.parse(localStorage.getItem(CKEY)); } catch { return null; } }
@@ -1251,16 +1347,17 @@
     $("setup").hidden = true; $("app").hidden = false; $("tabbar").hidden = false;
     const c = readCache();
     if (c){
-      goals = {...DEFAULT_GOALS, ...c.goals}; sups = c.sups || sups; foods = c.foods || foods; combos = c.combos || []; weights = c.weights || []; weekDocs = c.days || {};
+      goals = {...DEFAULT_GOALS, ...c.goals}; sups = c.sups || sups; foods = c.foods || foods; combos = c.combos || []; weights = c.weights || []; measures = c.measures || []; weekDocs = c.days || {};
       if (weekDocs[cur]) day = {...blank(cur), ...weekDocs[cur]};
       render(); // мгновенно, без серых заготовок
     } else { $("app").classList.add("loading"); render(); } // самый первый запуск
     loadDay(!!c);
     try {
       // настройки, добавки и продукты — параллельно, а не по очереди
-      const [s, su, fo, co, we] = await Promise.all(["settings.json", "supplements.json", "foods.json", "combos.json", "weights.json"].map(p => Store.read(p)));
+      const [s, su, fo, co, we, me] = await Promise.all(["settings.json", "supplements.json", "foods.json", "combos.json", "weights.json", "measures.json"].map(p => Store.read(p)));
       if (co) combos = co.data;
       if (we) weights = we.data;
+      if (me) measures = me.data;
       if (!s) await Store.update("settings.json", () => DEFAULT_GOALS, "начальные цели");
       else goals = {...DEFAULT_GOALS, ...s.data, micro: {...DEFAULT_GOALS.micro, ...(s.data.micro || {})}};
       if (!su) await Store.update("supplements.json", () => sups, "добавки");
