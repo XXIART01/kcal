@@ -1,6 +1,6 @@
 (() => {
   // ---------- constants ----------
-  const VERSION = 56;
+  const VERSION = 57;
   // iOS отдаёт выбранный в настройках размер текста через системный шрифт -apple-system-body (17 px по умолчанию):
   // масштабируем интерфейс тем же коэффициентом, но не больше 1,3 — иначе главный экран перестанет помещаться
   (() => { const p = document.createElement("span"); p.style.font = "-apple-system-body"; p.style.position = "absolute"; p.style.visibility = "hidden"; p.textContent = "a";
@@ -786,7 +786,7 @@
   }
 
   // неделя: 7 дней до сегодня; пустые дни (без записей) в средние не входят
-  async function renderWeekStats(){
+  async function renderWeekStats(){ // возвращает промис — после него считается блок «Анализы и добавки»
     const box = $("weekCard"); if (!box) return;
     const days28 = Array.from({length: 28}, (_, i) => addDays(todayIso(), i - 27)), days = days28.slice(-7);
     const docOf = d => d === cur ? day : weekDocs[d];
@@ -825,6 +825,47 @@
       const dn = parseIso(x.d).toLocaleDateString("ru-RU", {weekday: "short", day: "numeric", month: "long"});
       $("wSel").innerHTML = `${esc(dn.charAt(0).toUpperCase() + dn.slice(1))} — <b>${x.has ? fmt(x.t.kcal) + " ккал" : "нет записей"}</b>${x.has ? ` · Б ${fmt(x.t.p)} · Ж ${fmt(x.t.f)} · У ${fmt(x.t.c)}` : ""}`; };
   }
+  // серия: сколько дней подряд есть записи (сегодня ещё не начат — считаем со вчера)
+  async function streak(){
+    let d = todayIso(), n = 0;
+    const has = x => ((x === cur ? day : weekDocs[x])?.items || []).length > 0;
+    if (!has(d)) d = addDays(d, -1);
+    for (let i = 0; i < 120; i++){
+      if (!(d === cur ? day : weekDocs[d])){ const r = await Store.read(dayPath(d)).then(r => r?.data || {items: []}, () => null); if (!r) break; weekDocs[d] = r; }
+      if (!has(d)) break; n++; d = addDays(d, -1);
+    }
+    return n;
+  }
+
+  // анализы и добавки: что приходит с едой за 7 дней по дефицитам из анализов, курс добавок и дата пересдачи
+  const DEFICITS = ["fol", "b12", "fe", "vd"];
+  async function renderHealth(){
+    const box = $("healthCard"); if (!box) return;
+    const days = Array.from({length: 7}, (_, i) => addDays(todayIso(), i - 6)), docOf = d => d === cur ? day : weekDocs[d];
+    const logged = days.map(docOf).filter(x => (x?.items || []).length);
+    const rows = DEFICITS.map(k => {
+      const m = MICRO.find(x => x.k === k), goal = num(goals.micro?.[k] ?? m.def) || m.def;
+      // учитываем только дни, где у этого показателя есть данные; иначе честно пишем «нет данных»
+      const withData = logged.filter(doc => doc.items.some(it => it[k] != null && it[k] !== ""));
+      const avg = withData.length ? withData.reduce((s, doc) => s + totals(doc.items)[k], 0) / withData.length : null;
+      const pct = avg != null ? Math.min(100, avg / goal * 100) : 0;
+      return `<div class="hrow"><div class="lbl"><span>${m.n}</span><i>${avg != null ? `${fmt(avg, avg < 10 ? 1 : 0)} из ${fmt(goal, goal < 10 ? 1 : 0)} ${m.u}` : "нет данных"}</i></div>
+        <div class="bar"><div style="width:${pct}%;background:${pct >= 80 ? "#3ddc97" : pct >= 40 ? "#ffc53d" : "rgba(255,255,255,.45)"}"></div></div></div>`;
+    }).join("");
+    // курс добавок: отмечено приёмов за 7 дней из положенных
+    const per = sups.items.reduce((s, it) => s + (cur <= addMonths(sups.start, it.months) ? it.perDay : 0), 0);
+    const taken = days.reduce((s, d) => s + sups.items.reduce((a, it) => a + Math.min(it.perDay, num(docOf(d)?.sup?.[it.id])), 0), 0);
+    const retest = addMonths(sups.start, sups.retestMonths), left = Math.max(0, Math.round((parseIso(retest) - parseIso(todayIso())) / 864e5));
+    const st = await streak();
+    box.innerHTML = `<div class="cap row">Анализы и добавки<span>серия ${st} ${plural(st, "день", "дня", "дней")}</span></div>
+      <div class="hint">Среднее в день с едой за неделю — по продуктам, где указаны микроэлементы. Добавки сюда не входят.</div>
+      ${rows}
+      <div class="hsum">
+        <div><small>Добавки за 7 дней</small><b>${per ? Math.round(taken / (per * 7) * 100) : 0}%</b><i>${taken} из ${per * 7} приёмов</i></div>
+        <div><small>Повторные анализы</small><b>${left}<span> ${plural(left, "день", "дня", "дней")}</span></b><i>${esc(ruDate(retest))}</i></div>
+      </div>`;
+  }
+
   // последние 6 недель (пн–вс): средние калории по дням с записями, средний вес и изменение к прошлой неделе
   async function renderWeeks(){
     const box = $("weeksCard"); if (!box) return;
@@ -854,11 +895,11 @@
   }
   // внутри «Прогресса» — по одной теме на экране, чтобы не листать длинную ленту
   let progSec = "w";
-  const PROG_CARDS = {w: ["wCard"], m: ["measCard"], n: ["weekCard", "weeksCard"]};
+  const PROG_CARDS = {w: ["wCard"], m: ["measCard"], n: ["weekCard", "healthCard", "weeksCard"]};
   function renderProg(){
     $("progSeg").querySelectorAll("[data-ps]").forEach(b => { const on = b.dataset.ps === progSec; b.classList.toggle("on", on); b.setAttribute("aria-selected", on); });
     Object.entries(PROG_CARDS).forEach(([k, ids]) => ids.forEach(id => $(id).hidden = k !== progSec));
-    if (progSec === "w") renderWeight(); else if (progSec === "m") renderMeasures(); else { renderWeekStats(); renderWeeks(); }
+    if (progSec === "w") renderWeight(); else if (progSec === "m") renderMeasures(); else { renderWeekStats().then(renderHealth); renderWeeks(); }
   }
 
   // вся история (вес или замеры) — в отдельном окне, по месяцам; нажатие — правка

@@ -845,3 +845,16 @@ section:not([hidden])>*{animation:rise .55s var(--ease-ios) both}
 /* выбранный — тихая светлая подложка, как вкладка в нижней панели */
 .chips.seg .chip.on,.chips.scroll .chip.on{background:linear-gradient(180deg,rgba(255,255,255,.16),rgba(255,255,255,.08));box-shadow:inset 0 1px 0 rgba(255,255,255,.18);color:#fff}
 .wrange.chips.seg .chip{height:28px;border-radius:14px;font-size:13px}
+
+/* анализы и добавки */
+.hrow{margin:10px 0}
+.hrow .lbl{display:flex;justify-content:space-between;font-size:14px}
+.hrow .lbl i{font-style:normal;color:var(--faint);font-size:13px;font-variant-numeric:tabular-nums}
+.hrow .bar{margin-top:6px}
+.hsum{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px}
+.hsum>div{padding:10px 12px;border-radius:14px;background:rgba(255,255,255,.04)}
+.hsum small{display:block;font-size:12px;color:var(--mute)}
+.hsum b{display:block;font-size:22px;line-height:28px;font-weight:600;font-variant-numeric:tabular-nums}
+.hsum b span{font-size:13px;color:var(--faint);font-weight:400}
+.hsum i{font-style:normal;font-size:12px;color:var(--faint)}
+#healthCard .cap.row span{color:#3ddc97;font-weight:600}

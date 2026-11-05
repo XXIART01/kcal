@@ -42,11 +42,11 @@
     // пример дня — вчера (среда): Б 180 · Ж 70 · У 210 — все три выше нормы
     const wed = new Date(); wed.setDate(wed.getDate() - 1);
     db[`days/${iso(wed)}.json`] = {water: 750, items: [
-      {id:"a",name:"Овсянка с бананом",meal:"Завтрак",time:"08:30",g:300,kcal:420,p:14,f:8,c:72},
+      {id:"a",name:"Овсянка с бананом",meal:"Завтрак",time:"08:30",g:300,kcal:420,p:14,f:8,c:72,fol:40,fe:3},
       {id:"c",name:"Кофе с молоком",meal:"Завтрак",time:"08:40",kcal:60,p:3,f:3,c:5},
-      {id:"b",name:"Гречка с курицей",meal:"Обед",time:"13:10",g:350,kcal:560,p:48,f:14,c:58},
-      {id:"d",name:"Лосось с рисом",meal:"Ужин",time:"19:30",g:380,kcal:620,p:45,f:22,c:60},
-      {id:"e",name:"Творог 5% с ягодами",meal:"Перекус",time:"16:30",g:400,kcal:550,p:70,f:23,c:15}]};
+      {id:"b",name:"Гречка с курицей",meal:"Обед",time:"13:10",g:350,kcal:560,p:48,f:14,c:58,fol:80,fe:3,b12:.4},
+      {id:"d",name:"Лосось с рисом",meal:"Ужин",time:"19:30",g:380,kcal:620,p:45,f:22,c:60,b12:3.2,vd:11,fol:30,fe:1},
+      {id:"e",name:"Творог 5% с ягодами",meal:"Перекус",time:"16:30",g:400,kcal:550,p:70,f:23,c:15,b12:1.2,fol:40}]};
     // Store объявлен через const — снаружи рамки его не видно, поэтому подменяем изнутри через eval
     w.__mock = {hasToken: () => true, read: async k => db[k] ? {data: structuredClone(db[k])} : null,
       update: async (k, fn) => (db[k] = fn(db[k]), db[k]), clearToken(){}, check: async () => {}};
