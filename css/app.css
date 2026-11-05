@@ -586,3 +586,12 @@ section:not([hidden])>*{animation:rise .55s var(--ease-ios) both}
 .chips.seg{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:0 0 12px}
 .chips.seg .chip{padding:0 4px;font-size:13px}
 .lib-hint{margin:-4px 4px 12px}
+
+/* плашка «Удалено · Отменить» над панелью вкладок */
+.toast{position:fixed;left:50%;bottom:calc(var(--sab) + 88px);transform:translate(-50%,12px);opacity:0;pointer-events:none;z-index:30;
+  display:flex;align-items:center;gap:14px;max-width:calc(100% - 32px);padding:10px 10px 10px 16px;border-radius:22px;font-size:14px;white-space:nowrap;
+  background:rgba(40,40,48,.86);-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);box-shadow:inset 0 0 0 1px rgba(255,255,255,.1),0 8px 24px rgba(0,0,0,.3);
+  transition:opacity .3s var(--ease-ios),transform .4s var(--ease-ios)}
+.toast span{overflow:hidden;text-overflow:ellipsis}
+.toast.on{opacity:1;transform:translate(-50%,0);pointer-events:auto}
+.toast button{flex:none;height:32px;padding:0 14px;border-radius:16px;background:rgba(255,255,255,.14);font-weight:600;font-size:14px}

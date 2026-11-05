@@ -1,6 +1,6 @@
 (() => {
   // ---------- constants ----------
-  const VERSION = 25;
+  const VERSION = 26;
   // отладка вёрстки: ?iphone — зоны iPhone 13, ?grid — сетка и размеры блоков
   if (/[?&]iphone/.test(location.search)) document.documentElement.classList.add("sim-iphone");
   if (/[?&]grid/.test(location.search)) addEventListener("load", () => document.head.appendChild(Object.assign(document.createElement("script"), {src: "js/grid.js"})));
@@ -53,7 +53,7 @@
   let foods = []; // мои продукты: {id, name, brand, kcal, p, f, c — на 100 г, pc — вес 1 шт в г}
   let weekDocs = {};
   let pendingWater = null, waterTimer = null;
-  let queue = Promise.resolve(), inflight = 0;
+  let inflight = 0;
 
   const setStatus = (t, e) => { const s = $("status"); s.textContent = t || ""; s.className = "status" + (e ? " err" : ""); };
   const fail = (what, e) => {
@@ -265,7 +265,8 @@
   }
   function addItem(it, msg){
     remember(it);
-    mutate(d => ({...d, items: [...d.items, it]}), msg || "добавлено: " + it.name);
+    toast(`Добавлено в ${String(it.meal).toLowerCase()} · ${fmt(it.kcal)} ккал`, "Отменить", () => mutate({t: "del", id: it.id}, "отменено: " + it.name));
+    mutate({t: "put", item: it}, msg || "добавлено: " + it.name);
   }
 
   // ---------- Open Food Facts ----------
@@ -455,8 +456,7 @@
     $("mlist").onclick = e => {
       const del = e.target.closest("[data-del]");
       if (del){
-        const it = day.items.find(x => x.id === del.dataset.del);
-        mutate(d => ({...d, items: d.items.filter(x => x.id !== del.dataset.del)}), "удалено: " + (it?.name || ""));
+        removeItem(day.items.find(x => x.id === del.dataset.del));
         return mealSheet(m);
       }
       const row = e.target.closest(".swipe");
@@ -465,6 +465,21 @@
     };
     swipeRows($("mlist"));
     $("madd").onclick = () => addSheet(m);
+  }
+
+  // ---------- всплывающая плашка с действием (как в iOS: «Удалено · Отменить») ----------
+  let toastTimer;
+  function toast(text, action, fn){
+    const t = $("toast");
+    t.innerHTML = `<span>${esc(text)}</span>${action ? `<button>${esc(action)}</button>` : ""}`;
+    t.classList.add("on");
+    if (action) t.querySelector("button").onclick = () => { t.classList.remove("on"); fn(); };
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("on"), 4000);
+  }
+  function removeItem(it){
+    if (!it) return;
+    mutate({t: "del", id: it.id}, "удалено: " + it.name);
+    toast(`Удалено: ${it.name}`, "Отменить", () => mutate({t: "put", item: it}, "возвращено: " + it.name));
   }
 
   // смахивание строк влево открывает кнопку «Удалить»
@@ -535,8 +550,8 @@
     try {
       const r = await Store.read(dayPath(d));
       if (d !== cur) return;
-      day = {...blank(d), ...(r?.data || {})};
-      setStatus(""); render();
+      day = pendingFor(d).reduce(applyOp, {...blank(d), ...(r?.data || {})});
+      if (!pending.length) setStatus(""); render();
     } catch (e){ fail("Не загрузилось", e); }
     finally { clearTimeout(slow); if (d === cur) $("app").classList.remove("loading"); }
     const others = weekDays().filter(x => x !== d && x <= todayIso());
@@ -546,28 +561,60 @@
     renderWeek(); saveCache();
   }
 
-  // Оптимистично меняем экран, пишем на сервер по очереди (каждая правка = коммит).
-  function mutate(fn, msg){
-    const d = cur;
-    day = fn(day); render();
-    inflight++;
-    queue = queue.then(async () => {
-      try {
-        const saved = await Store.update(dayPath(d), cd => fn(cd || blank(d)), `${d}: ${msg}`);
-        if (d === cur && inflight === 1) { day = {...blank(d), ...saved}; render(); }
-        setStatus(""); saveCache();
-      } catch (e){ fail("Не сохранилось", e); }
-      inflight--;
-    });
+  // ---------- правки дня как простые операции: их можно сохранить на телефоне и отправить позже ----------
+  // put — добавить/заменить блюдо по id; del — удалить; water — прибавить мл; sup — отметки добавки
+  function applyOp(doc, op){
+    const d = {...doc, items: [...(doc.items || [])], sup: {...(doc.sup || {})}};
+    if (op.t === "put") d.items = d.items.some(x => x.id === op.item.id) ? d.items.map(x => x.id === op.item.id ? op.item : x) : [...d.items, op.item];
+    if (op.t === "del") d.items = d.items.filter(x => x.id !== op.id);
+    if (op.t === "water") d.water = Math.max(0, num(d.water) + op.add); // shortcut: при обрыве связи после записи прибавка может задвоиться — для воды допустимо
+    if (op.t === "sup") d.sup[op.id] = op.n;
+    return d;
   }
+  const PKEY = "kcal_pending";
+  let pending = (() => { try { return JSON.parse(localStorage.getItem(PKEY)) || []; } catch { return []; } })();
+  const savePending = () => { localStorage.setItem(PKEY, JSON.stringify(pending)); inflight = pending.length; };
+  inflight = pending.length;
+  const pendingFor = d => pending.filter(p => p.date === d).map(p => p.op);
 
+  // Оптимистично меняем экран; правка сначала ложится в очередь на телефоне, потом уходит на GitHub (каждая = коммит)
+  function mutate(op, msg){
+    const d = cur;
+    day = applyOp(day, op); render();
+    pending.push({date: d, op, msg}); savePending(); saveCache();
+    flush();
+  }
+  let flushing = false;
+  async function flush(){
+    if (flushing || !pending.length) return;
+    flushing = true;
+    try {
+      while (pending.length){
+        const {date, op, msg} = pending[0];
+        const saved = await Store.update(dayPath(date), cd => applyOp(cd || blank(date), op), `${date}: ${msg}`);
+        pending.shift(); savePending();
+        weekDocs[date] = saved;
+        if (date === cur && !pendingFor(date).length){ day = {...blank(date), ...saved}; render(); }
+      }
+      setStatus(""); saveCache();
+    } catch (e){
+      if (e?.code === 401) fail("Не сохранилось", e);
+      else setStatus(`Нет связи — ${pending.length} ${pending.length === 1 ? "запись сохранена" : "записей сохранено"} на телефоне, отправлю позже`);
+    } finally { flushing = false; }
+  }
+  addEventListener("online", flush);
+
+  let waterDelta = 0;
+  const waterLog = {}; // дата → стек добавленных порций за эту сессию
   function bumpWater(delta){
-    pendingWater = Math.max(0, (pendingWater ?? num(day.water)) + delta);
+    const before = pendingWater ?? num(day.water);
+    pendingWater = Math.max(0, before + delta);
+    waterDelta += pendingWater - before;
     render();
     clearTimeout(waterTimer);
     waterTimer = setTimeout(() => {
-      const v = pendingWater; pendingWater = null;
-      mutate(d => ({...d, water: v}), `вода ${v} мл`);
+      const add = waterDelta; waterDelta = 0; pendingWater = null;
+      if (add) mutate({t: "water", add}, `вода ${add > 0 ? "+" : ""}${add} мл`);
     }, 700);
   }
 
@@ -646,14 +693,14 @@
       });
       closeSheet();
       if (!it) remember(out);
-      mutate(d => ({...d, items: d.items.some(x => x.id === out.id) ? d.items.map(x => x.id === out.id ? out : x) : [...d.items, out]}), (it ? "правка: " : "добавлено: ") + out.name);
+      mutate({t: "put", item: out}, (it ? "правка: " : "добавлено: ") + out.name);
     };
     if (it){
       const b = $("delBtn");
       b.onclick = () => {
         if (!b.classList.contains("armed")){ b.classList.add("armed"); b.textContent = "Точно удалить?"; return; }
         closeSheet();
-        mutate(d => ({...d, items: d.items.filter(x => x.id !== it.id)}), "удалено: " + it.name);
+        removeItem(it);
       };
     }
   }
@@ -667,7 +714,37 @@
       <div class="hint">${esc(it.meal||"")}${it.time ? " · " + esc(it.time) : ""}</div>
       <div>${rows.map(([k,v]) => `<div class="kv"><i>${k}</i><span>${v}</span></div>`).join("")}</div>
       <button class="btn ghost" id="editBtn" style="margin-top:14px">Изменить</button>`);
-    $("editBtn").onclick = () => itemForm(it);
+    $("editBtn").onclick = () => it.g > 0 ? portionEdit(it) : itemForm(it);
+  }
+
+  // правка порции: меняем граммы и приём — калории и БЖУ пересчитываются сами
+  function portionEdit(it){
+    const prod = foods.find(f => f.id === it.food);
+    // на 1 г: из продукта (точнее), иначе из самой записи
+    const per = prod ? {kcal: prod.kcal / 100, p: prod.p / 100, f: prod.f / 100, c: prod.c / 100}
+                     : {kcal: it.kcal / it.g, p: num(it.p) / it.g, f: num(it.f) / it.g, c: num(it.c) / it.g};
+    let meal = MEALS.includes(it.meal) ? it.meal : "Перекус";
+    openSheet(`<h2>${esc(it.name)}</h2>
+      <div class="chips seg" id="emeal">${MEALS.map(m => `<button class="chip${m === meal ? " on" : ""}" data-m="${m}">${m}</button>`).join("")}</div>
+      <label class="fld"><span>Сколько, г</span><input id="eg" inputmode="decimal" value="${r1(it.g)}"></label>
+      ${prod?.pc ? `<div class="chips">${[1,2,3].map(n => `<button class="chip" data-n="${n}">${n} шт</button>`).join("")}</div>` : ""}
+      <div class="res" id="eres"></div>
+      <button class="btn" id="esave">Сохранить</button>
+      <button class="btn ghost" id="emanual">Править вручную</button>
+      <button class="btn danger" id="edel">Удалить</button>`);
+    const g = () => num(String($("eg").value).replace(",", "."));
+    const calc = () => ({kcal: Math.round(per.kcal * g()), p: r1(per.p * g()), f: r1(per.f * g()), c: r1(per.c * g())});
+    const show = () => { const c = calc(); $("eres").innerHTML = `<b>${fmt(c.kcal)}</b> ккал · Б ${fmt(c.p,1)} · Ж ${fmt(c.f,1)} · У ${fmt(c.c,1)}`; };
+    show(); $("eg").oninput = show;
+    $("emeal").onclick = e => { const b = e.target.closest("[data-m]"); if (!b) return; meal = b.dataset.m; $("emeal").querySelectorAll(".chip").forEach(x => x.classList.toggle("on", x === b)); };
+    $("sheetBody").querySelectorAll(".chip[data-n]").forEach(b => b.onclick = () => { $("eg").value = r1(prod.pc * b.dataset.n); show(); });
+    $("esave").onclick = () => {
+      if (!(g() > 0)) return $("eg").focus();
+      closeSheet();
+      mutate({t: "put", item: {...it, meal, g: r1(g()), ...calc()}}, `правка: ${it.name} ${r1(g())} г`);
+    };
+    $("emanual").onclick = () => itemForm(it);
+    $("edel").onclick = () => { closeSheet(); removeItem(it); };
   }
 
   function settingsSheet(){
@@ -691,7 +768,7 @@
         <button class="btn ghost" type="button" id="hardUpdate">Обновить приложение</button>
         <div class="hint" style="text-align:center;margin-top:10px">Версия ${VERSION}</div>
       </form>`);
-    $("logout").onclick = () => { closeSheet(); Store.clearToken(); localStorage.removeItem(CKEY); showSetup(); };
+    $("logout").onclick = () => { closeSheet(); Store.clearToken(); localStorage.removeItem(CKEY); localStorage.removeItem(PKEY); pending = []; savePending(); showSetup(); };
     // аварийный выход, если иконка на экране «Домой» застряла на старой версии
     $("hardUpdate").onclick = async () => {
       const regs = await navigator.serviceWorker?.getRegistrations?.() || [];
@@ -729,9 +806,9 @@
     e.preventDefault();
     const v = Math.round(num($("wIn").value)) || 250; // пусто = стакан 250 мл
     $("wIn").value = ""; $("wIn").blur();
-    if (v > 0 && v <= 5000) bumpWater(v);
+    if (v > 0 && v <= 5000){ (waterLog[cur] ||= []).push(v); bumpWater(v); }
   };
-  $("wMinus").onclick = () => bumpWater(-250);
+  $("wMinus").onclick = () => bumpWater(-((waterLog[cur] || []).pop() || 250)); // убрать последнюю порцию, иначе 250
   $("newFood").onclick = () => foodForm(null);
   $("foodQ").oninput = renderFoods;
   // лента категорий: своя горизонтальная прокрутка — упирается в края без «резинки», вертикальный жест уходит странице
@@ -774,9 +851,8 @@
   $("sups").onclick = e => {
     const b = e.target.closest(".dot"); if (!b) return;
     const id = b.dataset.sup, i = Number(b.dataset.i);
-    const set = n => d => ({...d, sup: {...d.sup, [id]: n}});
     const n = num(day.sup?.[id]) === i + 1 ? i : i + 1;
-    mutate(set(n), `добавка ${id}: ${n}`);
+    mutate({t: "sup", id, n}, `добавка ${id}: ${n}`);
   };
   $("tokForm").onsubmit = async e => {
     e.preventDefault();
@@ -824,13 +900,14 @@
       if (fo) foods = fo.data;
       else { foods = [...STARTER]; await Store.update("foods.json", () => foods, "базовые продукты"); }
     } catch (e){ return fail("Не загрузилось", e); }
-    render(); saveCache();
+    render(); saveCache(); flush();
   }
 
   addEventListener("scroll", () => document.documentElement.classList.toggle("scrolled", scrollY > 4), {passive: true});
 
   // записи с компьютера (Claude) подхватываются при каждом возврате в приложение
   document.addEventListener("visibilitychange", () => {
+    if (!document.hidden && Store.hasToken()) flush();
     if (!document.hidden && Store.hasToken() && !inflight && pendingWater == null) loadDay(true);
   });
 
