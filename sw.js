@@ -1,5 +1,5 @@
 // Оболочка: сеть в приоритете, кэш как запасной вариант. API GitHub (чужой origin) не трогаем.
-const CACHE = "kcal-v27";
+const CACHE = "kcal-v28";
 const SHELL = ["./", "index.html", "css/app.css", "js/api.js", "js/app.js", "manifest.json", "icons/icon-180.png"];
 self.addEventListener("install", e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL))); self.skipWaiting(); });
 self.addEventListener("activate", e => {

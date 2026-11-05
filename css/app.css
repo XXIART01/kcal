@@ -604,3 +604,13 @@ section:not([hidden])>*{animation:rise .55s var(--ease-ios) both}
 .quick small{display:block;color:var(--faint);font-size:12px;line-height:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .quick i{font-style:normal;font-weight:600;white-space:nowrap}
 .quick:active{transform:scale(.98)}
+
+/* звёздочка «в избранное» справа от продукта */
+.frow{display:flex;align-items:center;border-top:1px solid var(--line)}
+.frow:first-child{border-top:0}
+.frow .item{flex:1;min-width:0;border-top:0}
+.star{flex:none;width:44px;height:44px;margin-right:-10px;display:grid;place-items:center;color:rgba(235,235,245,.35);transition:color .2s,transform .18s var(--ease-ios)}
+.star .ico{width:20px;height:20px}
+.star.on{color:#ffd60a}
+.star.on .ico{fill:currentColor}
+.star:active{transform:scale(.85)}

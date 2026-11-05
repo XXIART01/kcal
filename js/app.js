@@ -1,6 +1,6 @@
 (() => {
   // ---------- constants ----------
-  const VERSION = 27;
+  const VERSION = 28;
   // отладка вёрстки: ?iphone — зоны iPhone 13, ?grid — сетка и размеры блоков
   if (/[?&]iphone/.test(location.search)) document.documentElement.classList.add("sim-iphone");
   if (/[?&]grid/.test(location.search)) addEventListener("load", () => document.head.appendChild(Object.assign(document.createElement("script"), {src: "js/grid.js"})));
@@ -131,6 +131,9 @@
   const foodName = f => f.brand ? `${f.name}, ${f.brand}` : f.name;
   // все слова запроса есть в названии или бренде
   const match = (f, q) => { const h = (f.name + " " + (f.brand || "")).toLowerCase(); return q.toLowerCase().split(/\s+/).every(w => h.includes(w)); };
+  const STAR = `<svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8L3.5 9.7l5.9-.9z"/></svg>`;
+  // строка «Моих продуктов» со звёздочкой «в избранное» справа
+  const favRow = f => `<div class="frow">${foodRow(f, `data-food="${esc(f.id)}"`)}<button class="star${f.fav ? " on" : ""}" data-star="${esc(f.id)}" aria-pressed="${!!f.fav}" aria-label="${f.fav ? "Убрать из избранного" : "В избранное"}">${STAR}</button></div>`;
   const foodRow = (f, attr) => `<button class="item" ${attr}><div class="nm"><div>${esc(f.name)}</div><small>${f.brand ? esc(f.brand) + " · " : ""}${per100(f)} на 100 г</small></div></button>`;
   const newId = p => p + Date.now().toString(36) + Math.random().toString(36).slice(2,6);
 
@@ -191,17 +194,23 @@
   function renderFoods(){
     const q = $("foodQ").value.trim();
     const have = CATS.filter(c => foods.some(f => catOf(f) === c));
-    if (foodCat && !have.includes(foodCat)) foodCat = "";
-    $("foodCats").innerHTML = have.length > 1 ? ["", ...have].map(c => `<button class="chip${c === foodCat ? " on" : ""}" data-cat="${esc(c)}">${c || "Все"}</button>`).join("") : "";
-    const list = foods.filter(f => (!q || match(f, q)) && (!foodCat || catOf(f) === foodCat));
+    if (foodCat && foodCat !== "fav" && !have.includes(foodCat)) foodCat = "";
+    const favs = foods.some(f => f.fav);
+    if (foodCat === "fav" && !favs) foodCat = "";
+    $("foodCats").innerHTML = have.length > 1 || favs ? ["", ...(favs ? ["fav"] : []), ...have].map(c => `<button class="chip${c === foodCat ? " on" : ""}" data-cat="${esc(c)}">${c === "fav" ? "★ Избранное" : c || "Все"}</button>`).join("") : "";
+    const list = foods.filter(f => (!q || match(f, q)) && (!foodCat || (foodCat === "fav" ? f.fav : catOf(f) === foodCat)));
     const missing = STARTER.filter(s => !foods.some(f => f.id === s.id)).length;
     const starterBtn = missing && !q && !foodCat ? `<button class="btn ghost" id="starterBtn">Добавить базовый набор (${missing} продуктов)</button>` : "";
     if (!list.length){
       $("foodList").innerHTML = `<div class="card"><div class="empty">${q || foodCat ? "Ничего не нашлось" : "Здесь будут сохранённые продукты. Найди продукт через «+» у приёма пищи, отсканируй штрихкод или добавь свой."}</div></div>` + starterBtn;
       return;
     }
-    $("foodList").innerHTML = starterBtn + CATS.filter(c => list.some(f => catOf(f) === c)).map(c =>
-      `<div class="cap">${c}</div><div class="card">${byUse(list.filter(f => catOf(f) === c)).map(f => foodRow(f, `data-food="${esc(f.id)}"`)).join("")}</div>`).join("");
+    // во «Все» избранное — отдельной группой сверху; в категориях избранное первым
+    const group = (title, arr) => `<div class="cap">${title}</div><div class="card">${arr.map(favRow).join("")}</div>`;
+    const sortFav = arr => byUse(arr).sort((a, b) => !!b.fav - !!a.fav);
+    $("foodList").innerHTML = foodCat === "fav" ? group("★ Избранное", byUse(list))
+      : starterBtn + (!foodCat && !q && favs ? group("★ Избранное", byUse(list.filter(f => f.fav))) : "")
+        + CATS.filter(c => list.some(f => catOf(f) === c)).map(c => group(c, sortFav(list.filter(f => catOf(f) === c)))).join("");
   }
 
   const saveFoods = msg => saveConf("foods.json", foods, msg);
@@ -340,7 +349,7 @@
     const draw = st => {
       if (!$("aq")) return; // окно уже закрыли, а ответ базы пришёл позже
       const q = $("aq").value.trim();
-      const mine = (q ? foods : byUse(foods)).filter(f => !q || match(f, q)).slice(0, q ? 30 : 8);
+      const mine = (q ? foods : byUse(foods).sort((a, b) => !!b.fav - !!a.fav)).filter(f => !q || match(f, q)).slice(0, q ? 30 : 8);
       let h = "";
       if (!q){
         const yItems = (weekDocs[addDays(cur, -1)]?.items || []).filter(x => (MEALS.includes(x.meal) ? x.meal : "Перекус") === meal);
@@ -872,7 +881,11 @@
   })();
   $("foodCats").onclick = e => { const b = e.target.closest("[data-cat]"); if (b){ foodCat = b.dataset.cat; renderFoods(); } };
   $("scanBtn").onclick = () => scanSheet();
-  $("foodList").onclick = e => { if (e.target.closest("#starterBtn")) return addStarter(); const b = e.target.closest("[data-food]"); if (b) portionSheet(foods.find(f => f.id === b.dataset.food), null, false); };
+  $("foodList").onclick = e => {
+    if (e.target.closest("#starterBtn")) return addStarter();
+    const s = e.target.closest("[data-star]");
+    if (s){ const f = foods.find(x => x.id === s.dataset.star); f.fav = !f.fav; if (!f.fav) delete f.fav; renderFoods(); return saveFoods((f.fav ? "в избранное: " : "из избранного: ") + f.name); }
+    const b = e.target.closest("[data-food]"); if (b) portionSheet(foods.find(f => f.id === b.dataset.food), null, false); };
   $("mealSum").onclick = e => {
     const a = e.target.closest("[data-add]"); if (a) return addSheet(a.dataset.add);
     const r = e.target.closest(".ms"); if (r) mealSheet(r.dataset.meal);
