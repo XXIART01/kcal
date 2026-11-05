@@ -57,12 +57,11 @@
 
   <div class="card row-card">
     <div><div class="cap">Вода</div><div class="w-num" id="wNum"></div></div>
-    <div class="w-btns" id="wForm">
+    <form class="w-btns" id="wForm">
       <button class="round" type="button" id="wMinus" aria-label="Убрать последнюю порцию воды"><svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M5 12h14"/></svg></button>
-      <button class="wchip" type="button" data-ml="250" aria-label="Плюс 250 мл">+250</button>
-      <button class="wchip" type="button" data-ml="500" aria-label="Плюс 500 мл">+500</button>
-      <button class="round" type="button" id="wCustom" aria-label="Своё количество"><svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16zM14 6l4 4"/></svg></button>
-    </div>
+      <input class="w-in" id="wIn" type="number" inputmode="numeric" min="1" max="5000" placeholder="мл" aria-label="Сколько мл добавить">
+      <button class="round" type="submit" aria-label="Добавить воду"><svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
+    </form>
   </div>
 
   <div class="card meals-sum" id="mealSum"></div>

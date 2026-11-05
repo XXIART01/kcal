@@ -1,6 +1,6 @@
 (() => {
   // ---------- constants ----------
-  const VERSION = 40;
+  const VERSION = 41;
   // отладка вёрстки: ?iphone — зоны iPhone 13, ?grid — сетка и размеры блоков
   if (/[?&]iphone/.test(location.search)) document.documentElement.classList.add("sim-iphone");
   if (/[?&]grid/.test(location.search)) addEventListener("load", () => document.head.appendChild(Object.assign(document.createElement("script"), {src: "js/grid.js"})));
@@ -1046,15 +1046,13 @@
   })();
   $("dateLbl").onclick = () => go(todayIso());
   const addWater = v => { if (v > 0 && v <= 5000){ (waterLog[cur] ||= []).push(v); bumpWater(v); } };
-  $("wForm").onclick = e => { const b = e.target.closest("[data-ml]"); if (b) addWater(num(b.dataset.ml)); };
-  // своё количество — в небольшом окне с цифровой клавиатурой
-  $("wCustom").onclick = () => {
-    openSheet(`<h2>Вода</h2><form id="wcForm"><label class="fld"><span>Сколько, мл</span><input id="wcIn" type="number" inputmode="numeric" min="1" max="5000" placeholder="330" required></label>
-      <div class="chips">${[150, 200, 330, 750, 1000].map(n => `<button type="button" class="chip" data-v="${n}">${n}</button>`).join("")}</div>
-      <button class="btn" type="submit">Добавить</button></form>`);
-    $("sheetBody").querySelectorAll("[data-v]").forEach(b => b.onclick = () => { closeSheet(); addWater(num(b.dataset.v)); });
-    $("wcForm").onsubmit = e => { e.preventDefault(); closeSheet(); addWater(Math.round(num($("wcIn").value))); };
-    setTimeout(() => $("wcIn")?.focus(), 300);
+  // вода: ввёл мл и «+»; «−» убирает последнюю добавленную порцию
+  $("wForm").onsubmit = e => {
+    e.preventDefault();
+    const v = Math.round(num($("wIn").value));
+    if (!(v > 0)) return $("wIn").focus();
+    $("wIn").value = ""; $("wIn").blur();
+    addWater(v);
   };
   $("wMinus").onclick = () => bumpWater(-((waterLog[cur] || []).pop() || 250)); // убрать последнюю порцию, иначе 250
   $("newFood").onclick = () => foodForm(null);
