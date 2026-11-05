@@ -793,3 +793,10 @@ section:not([hidden])>*{animation:rise .55s var(--ease-ios) both}
 .addpill::after{content:"";position:absolute;inset:-6px 0}
 .addpill:active{transform:scale(.95)}
 #wCard .cap.row,#measCard .cap.row{align-items:center;margin-bottom:8px}
+.whrow small{flex:1;margin-left:12px;text-align:right;color:var(--faint);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* перебор — сплошной столбик/полоса: цвет ровно обрезается, белое сразу над ним, без щели */
+.wb .col.cut{border-radius:0 0 3px 3px}
+.wb .col.ov{border-radius:6px 6px 0 0}
+.bar{gap:0}
+.bar>.cut{border-radius:4px 0 0 4px}
+.bar>.ov{border-radius:0 4px 4px 0}

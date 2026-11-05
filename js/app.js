@@ -1,6 +1,6 @@
 (() => {
   // ---------- constants ----------
-  const VERSION = 50;
+  const VERSION = 52;
   // iOS отдаёт выбранный в настройках размер текста через системный шрифт -apple-system-body (17 px по умолчанию):
   // масштабируем интерфейс тем же коэффициентом, но не больше 1,3 — иначе главный экран перестанет помещаться
   (() => { const p = document.createElement("span"); p.style.font = "-apple-system-body"; p.style.position = "absolute"; p.style.visibility = "hidden"; p.textContent = "a";
@@ -118,7 +118,7 @@
     $("macros").innerHTML = [["Белки","p","--p"],["Углеводы","c","--c"],["Жиры","f","--f"]].map(([n,k,col]) => {
       const v = t[k], gg = Math.max(g[k], 1);
       const fill = v > gg
-        ? `<div style="width:${gg / v * 100}%;background:var(${col})"></div><div class="ov" style="width:${(v - gg) / v * 100}%"></div>`
+        ? `<div class="cut" style="width:${gg / v * 100}%;background:var(${col})"></div><div class="ov" style="width:${(v - gg) / v * 100}%"></div>`
         : `<div style="width:${v / gg * 100}%;background:var(${col})"></div>`;
       return `<div class="tile" role="img" aria-label="${n}: ${fmt(v)} из ${fmt(g[k])} грамм${v > gg ? ", сверх нормы " + fmt(v - gg) : ""}"><div class="cap" aria-hidden="true">${n}</div><b>${fmt(v)}</b><small class="goal">из ${fmt(g[k])} г${v > gg ? ` <em>+${fmt(v - gg)}</em>` : ""}</small><div class="bar">${fill}</div></div>`;
     }).join("");
@@ -753,9 +753,9 @@
     box.innerHTML = `<div class="cap row">Замеры тела<button class="addpill" id="mAdd" aria-label="Записать замеры"><svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Записать</button></div>
       <div class="hint">Последний раз — ${esc(ruDate(last.date))}. Изменение — с первого замера${measures.length > 1 ? ` (${esc(ruDate(measures[0].date))})` : ""}.</div>
       <div class="mlist">${rows}</div>
-      ${measures.length ? `<button class="goalrow" id="mEdit">Изменить последний замер<svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16zM14 6l4 4"/></svg></button>` : ""}`;
+      <div class="whist" id="mHist">${measures.slice(-6).reverse().map(m => `<button class="whrow" data-md="${m.date}" aria-label="Замер ${esc(ruDate(m.date))}, изменить"><span>${esc(m.date === todayIso() ? "Сегодня" : ruDate(m.date))}</span><small>${esc(MEAS.filter(([k]) => m[k] > 0).slice(0, 2).map(([k, n]) => `${n.toLowerCase()} ${fmt(m[k], 1)}`).join(" · "))}</small></button>`).join("")}</div>`;
     $("mAdd").onclick = () => measSheet();
-    $("mEdit").onclick = () => measSheet(last);
+    $("mHist").onclick = e => { const b = e.target.closest("[data-md]"); if (b) measSheet(measures.find(m => m.date === b.dataset.md)); };
   }
   function measSheet(entry){
     const last = measures[measures.length - 1] || {}, src = entry || last, date = entry?.date || todayIso();
@@ -765,6 +765,7 @@
       <div class="hint">Мерить утром, на одном и том же месте: талия — по пупку, бёдра — по самой широкой части. Можно заполнить не все.</div>
       <button class="btn" type="submit">Сохранить</button>
       ${entry ? `<button class="btn danger" type="button" id="mdel">Удалить замер</button>` : ""}</form>`);
+    $("mdate").onchange = () => { const m = measures.find(x => x.date === $("mdate").value); if (m) MEAS.forEach(([k]) => { const el = $("mForm").elements[k]; if (el) el.value = m[k] ? fmt(m[k], 1) : ""; }); };
     $("mForm").onsubmit = e => {
       e.preventDefault();
       const fd = new FormData(e.target), d = $("mdate").value || todayIso(), m = {date: d};
@@ -803,7 +804,7 @@
       <div class="wbars" role="img" aria-label="Калории по дням за неделю">
         <div class="gline" style="bottom:${20 + g.kcal / maxK * 100}px"></div>
         ${st.map(x => { const h = x.t.kcal / maxK * 100, over = x.t.kcal > g.kcal * 1.05, gh = Math.min(x.t.kcal, g.kcal) / maxK * 100;
-          return `<div class="wb${x.d === todayIso() ? " today" : ""}" title="${fmt(x.t.kcal)} ккал"><div class="col" style="height:${gh}%"></div>${over ? `<div class="col ov" style="height:${h - gh}%;bottom:${gh}%"></div>` : ""}<span>${esc(parseIso(x.d).toLocaleDateString("ru-RU", {weekday: "short"}))}</span></div>`; }).join("")}
+          return `<div class="wb${x.d === todayIso() ? " today" : ""}" title="${fmt(x.t.kcal)} ккал"><div class="col${over ? " cut" : ""}" style="height:${gh}%"></div>${over ? `<div class="col ov" style="height:${h - gh}%;bottom:${gh}%"></div>` : ""}<span>${esc(parseIso(x.d).toLocaleDateString("ru-RU", {weekday: "short"}))}</span></div>`; }).join("")}
       </div>`;
   }
   // последние 6 недель (пн–вс): средние калории по дням с записями, средний вес и изменение к прошлой неделе
