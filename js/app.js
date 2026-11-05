@@ -1,6 +1,6 @@
 (() => {
   // ---------- constants ----------
-  const VERSION = 35;
+  const VERSION = 36;
   // отладка вёрстки: ?iphone — зоны iPhone 13, ?grid — сетка и размеры блоков
   if (/[?&]iphone/.test(location.search)) document.documentElement.classList.add("sim-iphone");
   if (/[?&]grid/.test(location.search)) addEventListener("load", () => document.head.appendChild(Object.assign(document.createElement("script"), {src: "js/grid.js"})));
@@ -312,7 +312,8 @@
   const OFF_FIELDS = "code,product_name,product_name_ru,brands,nutriments,categories_tags,serving_quantity,product_quantity,quantity";
   function offMap(x){
     const n = x.nutriments || {};
-    const name = unent(x.product_name_ru || x.product_name).trim();
+    let name = unent(x.product_name_ru || x.product_name).trim().replace(/\s+/g, " ");
+    name = name.charAt(0).toUpperCase() + name.slice(1); // в базе названия пишут люди, часто строчными
     return {name, brand: unent(x.brands).split(",")[0].trim(), cat: guessCat(name, x.categories_tags), code: x.code,
       kcal: n["energy-kcal_100g"] != null ? r1(n["energy-kcal_100g"]) : null, p: r1(n.proteins_100g), f: r1(n.fat_100g), c: r1(n.carbohydrates_100g),
       ...offPortion(x)};
@@ -654,8 +655,11 @@
       if (horiz) el.scrollLeft = s0 - dx; // браузер сам ограничит 0…max
     }, {passive: true});
     el.addEventListener("touchend", () => { x0 = null; }, {passive: true});
-    el.addEventListener("pointerdown", e => { if (e.pointerType !== "mouse") return; mx = e.clientX; ms = el.scrollLeft; dragged = false; el.setPointerCapture(e.pointerId); });
-    el.addEventListener("pointermove", e => { if (mx === null) return; const dx = e.clientX - mx; if (Math.abs(dx) > 4) dragged = true; el.scrollLeft = ms - dx; });
+    // захват мыши — только когда началось перетаскивание: иначе клик уходит ленте, а не чипу, и чип не выбирается
+    el.addEventListener("pointerdown", e => { if (e.pointerType !== "mouse") return; mx = e.clientX; ms = el.scrollLeft; dragged = false; });
+    el.addEventListener("pointermove", e => { if (mx === null) return; const dx = e.clientX - mx;
+      if (!dragged && Math.abs(dx) > 4){ dragged = true; el.setPointerCapture(e.pointerId); }
+      if (dragged) el.scrollLeft = ms - dx; });
     el.addEventListener("pointerup", () => { mx = null; });
     el.addEventListener("click", e => { if (dragged){ e.stopImmediatePropagation(); e.preventDefault(); dragged = false; } }, true);
     el.addEventListener("wheel", e => { const d = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY; if (!d) return; el.scrollLeft += d; e.preventDefault(); }, {passive: false});
@@ -688,11 +692,11 @@
       if (e.pointerType !== "mouse" || e.target.closest(".del")) return;
       mrow = e.target.closest(".swipe"); if (!mrow) return;
       root.querySelectorAll(".swipe.open").forEach(r => r !== mrow && r.classList.remove("open"));
-      mx0 = e.clientX; mdx = 0; mdrag = false; root.setPointerCapture(e.pointerId);
+      mx0 = e.clientX; mdx = 0; mdrag = false;
     });
     root.addEventListener("pointermove", e => {
       if (!mrow) return;
-      const m = e.clientX - mx0; if (Math.abs(m) > 6) mdrag = true; if (!mdrag) return;
+      const m = e.clientX - mx0; if (!mdrag && Math.abs(m) > 6){ mdrag = true; root.setPointerCapture(e.pointerId); } if (!mdrag) return;
       mdx = Math.max(-96, Math.min(0, m + (mrow.classList.contains("open") ? -96 : 0)));
       mrow.querySelector(".item").style.transform = `translateX(${mdx}px)`; mrow.classList.add("drag");
     });
