@@ -1,6 +1,6 @@
 (() => {
   // ---------- constants ----------
-  const VERSION = 41;
+  const VERSION = 42;
   // отладка вёрстки: ?iphone — зоны iPhone 13, ?grid — сетка и размеры блоков
   if (/[?&]iphone/.test(location.search)) document.documentElement.classList.add("sim-iphone");
   if (/[?&]grid/.test(location.search)) addEventListener("load", () => document.head.appendChild(Object.assign(document.createElement("script"), {src: "js/grid.js"})));
@@ -845,7 +845,10 @@
   addEventListener("online", flush);
 
   let waterDelta = 0;
-  const waterLog = {}; // дата → стек добавленных порций за эту сессию
+  // дата → добавленные порции воды; хранится на телефоне, чтобы «−» знал последнюю порцию и после перезапуска
+  const WKEY = "kcal_water_log";
+  const waterLog = (() => { try { return JSON.parse(localStorage.getItem(WKEY)) || {}; } catch { return {}; } })();
+  const saveWaterLog = () => { for (const k of Object.keys(waterLog)) if (k < addDays(todayIso(), -14)) delete waterLog[k]; localStorage.setItem(WKEY, JSON.stringify(waterLog)); };
   function bumpWater(delta){
     const before = pendingWater ?? num(day.water);
     pendingWater = Math.max(0, before + delta);
@@ -1045,7 +1048,7 @@
       if (steps){ stripFrom = dx + steps * slot; go(addDays(cur, steps)); } else el.style.transform = ""; });
   })();
   $("dateLbl").onclick = () => go(todayIso());
-  const addWater = v => { if (v > 0 && v <= 5000){ (waterLog[cur] ||= []).push(v); bumpWater(v); } };
+  const addWater = v => { if (v > 0 && v <= 5000){ (waterLog[cur] ||= []).push(v); saveWaterLog(); bumpWater(v); } };
   // вода: ввёл мл и «+»; «−» убирает последнюю добавленную порцию
   $("wForm").onsubmit = e => {
     e.preventDefault();
@@ -1054,7 +1057,18 @@
     $("wIn").value = ""; $("wIn").blur();
     addWater(v);
   };
-  $("wMinus").onclick = () => bumpWater(-((waterLog[cur] || []).pop() || 250)); // убрать последнюю порцию, иначе 250
+  // «−»: число в поле — убрать его; поле пустое — убрать последнюю добавленную порцию; порций нет — спросить сколько
+  $("wMinus").onclick = () => {
+    const typed = Math.round(num($("wIn").value));
+    if (typed > 0){
+      $("wIn").value = ""; $("wIn").blur();
+      const log = waterLog[cur] || [], i = log.lastIndexOf(typed); if (i >= 0){ log.splice(i, 1); saveWaterLog(); }
+      return bumpWater(-typed);
+    }
+    const last = (waterLog[cur] || []).pop();
+    if (last){ saveWaterLog(); return bumpWater(-last); }
+    $("wIn").focus(); toast("Впиши, сколько мл убрать, и нажми «−»");
+  };
   $("newFood").onclick = () => foodForm(null);
   $("foodQ").oninput = renderFoods;
   hscroll($("foodCats"));
