@@ -1,6 +1,6 @@
 (() => {
   // ---------- constants ----------
-  const VERSION = 62;
+  const VERSION = 63;
   // iOS отдаёт выбранный в настройках размер текста через системный шрифт -apple-system-body (17 px по умолчанию):
   // масштабируем интерфейс тем же коэффициентом, но не больше 1,3 — иначе главный экран перестанет помещаться
   (() => { const p = document.createElement("span"); p.style.font = "-apple-system-body"; p.style.position = "absolute"; p.style.visibility = "hidden"; p.textContent = "a";
@@ -223,7 +223,7 @@
     $("foodCats").innerHTML = have.length > 1 || favs ? ["", ...(favs ? ["fav"] : []), ...have].map(c => `<button class="chip${c === foodCat ? " on" : ""}" data-cat="${esc(c)}">${c === "fav" ? "★ Избранное" : c || "Все"}</button>`).join("") : "";
     const list = foods.filter(f => (!q || match(f, q)) && (!foodCat || (foodCat === "fav" ? f.fav : catOf(f) === foodCat)));
     const missing = STARTER.filter(s => !foods.some(f => f.id === s.id)).length;
-    const starterBtn = missing && !foods.length && !q && !foodCat ? // только для пустого каталога (новый телефон) `<button class="btn ghost" id="starterBtn">Добавить базовый набор (${missing} продуктов)</button>` : "";
+    const starterBtn = missing && !foods.length && !q && !foodCat ? /* только для пустого каталога */ `<button class="btn ghost" id="starterBtn">Добавить базовый набор (${missing} продуктов)</button>` : "";
     if (!list.length){
       $("foodList").innerHTML = `<div class="card"><div class="empty">${q || foodCat ? "Ничего не нашлось" : "Здесь будут сохранённые продукты. Найди продукт через «+» у приёма пищи, отсканируй штрихкод или добавь свой."}</div></div>` + starterBtn;
       return;
