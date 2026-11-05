@@ -1,6 +1,6 @@
 (() => {
   // ---------- constants ----------
-  const VERSION = 48;
+  const VERSION = 49;
   // iOS отдаёт выбранный в настройках размер текста через системный шрифт -apple-system-body (17 px по умолчанию):
   // масштабируем интерфейс тем же коэффициентом, но не больше 1,3 — иначе главный экран перестанет помещаться
   (() => { const p = document.createElement("span"); p.style.font = "-apple-system-body"; p.style.position = "absolute"; p.style.visibility = "hidden"; p.textContent = "a";
@@ -672,8 +672,10 @@
         ${list.map((w, i) => `<circle cx="${x(i).toFixed(1)}" cy="${y(w.kg).toFixed(1)}" r="2.6" class="pt"/>`).join("")}
       </svg>
       <div class="wlegend"><span><i class="pt"></i>замеры</span><span><i class="tr"></i>тренд</span>${goal ? `<span><i class="gl"></i>цель ${kgFmt(goal)}</span>` : ""}</div>
+      <button class="goalrow" id="wGoal">${goal ? `Цель: <b>${kgFmt(goal)} кг</b>` : "Задать цель по весу"}<svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16zM14 6l4 4"/></svg></button>
       <div class="whist">${weights.slice(-5).reverse().map(w => `<button class="whrow" data-wd="${w.date}"><span>${esc(w.date === todayIso() ? "Сегодня" : ruDate(w.date))}</span><b>${kgFmt(w.kg)} кг</b></button>`).join("")}</div>`;
     $("wAdd").onclick = () => weightSheet();
+    $("wGoal").onclick = goalSheet;
     box.querySelector(".whist").onclick = e => { const b = e.target.closest("[data-wd]"); if (b) weightSheet(weights.find(w => w.date === b.dataset.wd)); };
   }
 
@@ -684,7 +686,6 @@
       <form id="wForm2">
         <div class="grid2"><label class="fld"><span>Дата</span><input id="wdate" type="date" max="${todayIso()}" value="${date}" required></label>
           <label class="fld"><span>Вес, кг</span><input id="wkg" inputmode="decimal" value="${same ? kgFmt(same.kg) : last ? kgFmt(last.kg) : ""}" placeholder="88,4" required></label></div>
-        <label class="fld"><span>Цель, кг (необязательно)</span><input id="wgoal" inputmode="decimal" value="${goals.weightGoal ? kgFmt(goals.weightGoal) : ""}" placeholder="80"></label>
         <div class="hint">Лучше взвешиваться утром натощак. Забыли вчера — выберите вчерашнюю дату.</div>
         <button class="btn" type="submit">Сохранить</button>
         ${entry ? `<button class="btn danger" type="button" id="wdel">Удалить запись</button>` : ""}
@@ -693,12 +694,11 @@
     $("wdate").onchange = () => { const w = weights.find(x => x.date === $("wdate").value); if (w) $("wkg").value = kgFmt(w.kg); };
     $("wForm2").onsubmit = e => {
       e.preventDefault();
-      const d = $("wdate").value || todayIso(), kg = r1(String($("wkg").value).replace(",", ".")), g = r1(String($("wgoal").value).replace(",", "."));
+      const d = $("wdate").value || todayIso(), kg = r1(String($("wkg").value).replace(",", "."));
       if (!(kg > 20 && kg < 400)) return $("wkg").focus();
       if (d > todayIso()) return $("wdate").focus();
       weights = [...weights.filter(w => w.date !== d && w.date !== entry?.date), {date: d, kg}].sort((a, b) => a.date.localeCompare(b.date));
       saveConf("weights.json", weights, `вес ${d}: ${kg} кг`);
-      if ((g || 0) !== (goals.weightGoal || 0)){ goals = {...goals, weightGoal: g > 0 ? g : undefined}; saveConf("settings.json", goals, "цель по весу"); }
       closeSheet(); renderProg(); toast(`Вес ${kgFmt(kg)} кг — ${d === todayIso() ? "сегодня" : ruDate(d)}`);
     };
     if (entry) $("wdel").onclick = () => {
@@ -706,6 +706,22 @@
       closeSheet(); renderProg(); toast(`Удалено: вес ${ruDate(entry.date)}`, "Отменить", () => { weights = old; saveConf("weights.json", weights, "возвращён вес"); renderProg(); });
     };
     if (!entry) setTimeout(() => $("wkg")?.select(), 350);
+  }
+
+  // цель по весу — одна на всё время, задаётся отдельно (не при каждом взвешивании)
+  function goalSheet(){
+    openSheet(`<h2>Цель по весу</h2>
+      <form id="gwForm"><label class="fld"><span>Цель, кг</span><input id="gw" inputmode="decimal" value="${goals.weightGoal ? kgFmt(goals.weightGoal) : ""}" placeholder="80"></label>
+      <div class="hint">По ней считается, сколько осталось и примерный срок. Оставь пустым, чтобы убрать цель.</div>
+      <button class="btn" type="submit">Сохранить</button></form>`);
+    $("gwForm").onsubmit = e => {
+      e.preventDefault();
+      const g = r1(String($("gw").value).replace(",", "."));
+      if ($("gw").value.trim() && !(g > 20 && g < 400)) return $("gw").focus();
+      goals = {...goals, weightGoal: g > 0 ? g : undefined}; saveConf("settings.json", goals, "цель по весу");
+      closeSheet(); renderWeight(); toast(g > 0 ? `Цель: ${kgFmt(g)} кг` : "Цель убрана");
+    };
+    setTimeout(() => $("gw")?.select(), 350);
   }
 
   // скорость по тренду: кг в неделю за последние ~2 недели
@@ -1205,6 +1221,7 @@
         <div class="grid2">
           <label class="fld"><span>Калории, ккал</span><input name="kcal" inputmode="decimal" value="${g.kcal}"></label>
           <label class="fld"><span>Вода, мл</span><input name="water" inputmode="decimal" value="${g.water}"></label>
+          <label class="fld"><span>Цель по весу, кг</span><input name="weightGoal" inputmode="decimal" value="${g.weightGoal ? String(g.weightGoal).replace(".", ",") : ""}" placeholder="необязательно"></label>
         </div>
         <div class="grid3">
           <label class="fld"><span>Белки, г</span><input name="p" inputmode="decimal" value="${g.p}"></label>
@@ -1232,6 +1249,7 @@
       const fd = new FormData(e.target);
       const n = (k, d) => { const v = num(String(fd.get(k)).replace(",", ".")); return v > 0 ? v : d; };
       const ng = {kcal:n("kcal",g.kcal), water:n("water",g.water), p:n("p",g.p), f:n("f",g.f), c:n("c",g.c), micro:{}};
+      const wg = num(String(fd.get("weightGoal") || "").replace(",", ".")); if (wg > 20 && wg < 400) ng.weightGoal = r1(wg);
       MICRO.forEach(m => ng.micro[m.k] = n("mi_"+m.k, g.micro?.[m.k] ?? m.def));
       closeSheet(); goals = ng; render();
       saveConf("settings.json", ng, "цели");

@@ -784,3 +784,6 @@ section:not([hidden])>*{animation:rise .55s var(--ease-ios) both}
 .wtr{border-top:1px solid var(--line)}
 .wtr span:first-child{color:var(--mute)}
 .wtr .over{color:rgba(255,255,255,.85);font-weight:600}
+.goalrow{display:flex;align-items:center;justify-content:space-between;width:100%;min-height:44px;margin-top:8px;padding:0 12px;border-radius:12px;background:rgba(255,255,255,.04);font-size:14px;color:var(--mute)}
+.goalrow b{color:#fff;font-weight:600}
+.goalrow .ico{width:16px;height:16px;color:var(--faint)}
