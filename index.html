@@ -22,6 +22,7 @@
   <div class="top">
     <button class="title" id="dateLbl"></button>
     <div class="top-btns">
+      <button class="icon-btn" id="supBtn" aria-label="Добавки"><svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><rect x="4" y="9" width="16" height="6" rx="3" transform="rotate(-45 12 12)"/><path d="M9.2 9.2l5.6 5.6"/></svg><b class="badge" id="supBadge"></b></button>
       <button class="icon-btn" id="scanBtn" aria-label="Сканировать штрихкод"><svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M4 7V5a1 1 0 0 1 1-1h2M17 4h2a1 1 0 0 1 1 1v2M20 17v2a1 1 0 0 1-1 1h-2M7 20H5a1 1 0 0 1-1-1v-2M8 8v8M11 8v8M14 8v8M17 8v8"/></svg></button>
       <button class="icon-btn" id="settingsBtn" aria-label="Цели"><svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
     </div>
@@ -56,11 +57,12 @@
 
   <div class="card row-card">
     <div><div class="cap">Вода</div><div class="w-num" id="wNum"></div></div>
-    <form class="w-btns" id="wForm">
-      <button class="round" type="button" id="wMinus" aria-label="Минус 250 мл"><svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M5 12h14"/></svg></button>
-      <input class="w-in" id="wIn" type="number" inputmode="numeric" min="1" max="5000" placeholder="250" aria-label="Сколько мл добавить">
-      <button class="round add" type="submit" aria-label="Добавить воду"><svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
-    </form>
+    <div class="w-btns" id="wForm">
+      <button class="round" type="button" id="wMinus" aria-label="Убрать последнюю порцию воды"><svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M5 12h14"/></svg></button>
+      <button class="wchip" type="button" data-ml="250" aria-label="Плюс 250 мл">+250</button>
+      <button class="wchip" type="button" data-ml="500" aria-label="Плюс 500 мл">+500</button>
+      <button class="round" type="button" id="wCustom" aria-label="Своё количество"><svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16zM14 6l4 4"/></svg></button>
+    </div>
   </div>
 
   <div class="card meals-sum" id="mealSum"></div>

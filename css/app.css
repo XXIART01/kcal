@@ -661,3 +661,14 @@ section:not([hidden])>*{animation:rise .55s var(--ease-ios) both}
 /* метка магазина под названием продукта */
 .tag{display:inline-block;margin-right:6px;padding:0 6px;border-radius:6px;font-size:11px;line-height:16px;color:rgba(235,235,245,.75);background:rgba(255,255,255,.08)}
 .tag.dim{color:rgba(235,235,245,.45);background:rgba(255,255,255,.05)}
+
+/* вода: быстрые стаканы */
+.wchip{height:40px;padding:0 12px;border-radius:20px;font-weight:600;font-size:14px;background:var(--gbtn);box-shadow:var(--gbtn-edge);font-variant-numeric:tabular-nums}
+.wchip:active{transform:scale(.94)}
+.w-btns{gap:6px}
+/* добавки в шапке: счётчик принятых */
+#supBtn{position:relative}
+.badge{position:absolute;right:-6px;top:-4px;min-width:22px;height:16px;padding:0 4px;border-radius:8px;font-size:10px;line-height:16px;font-weight:700;text-align:center;
+  background:#2c2c34;color:#fff;box-shadow:0 0 0 1.5px #0b0b0e}
+#supBtn.done .badge{background:#34d399;color:#0b0b0e}
+.badge:empty{display:none}

@@ -1,6 +1,6 @@
 (() => {
   // ---------- constants ----------
-  const VERSION = 39;
+  const VERSION = 40;
   // отладка вёрстки: ?iphone — зоны iPhone 13, ?grid — сетка и размеры блоков
   if (/[?&]iphone/.test(location.search)) document.documentElement.classList.add("sim-iphone");
   if (/[?&]grid/.test(location.search)) addEventListener("load", () => document.head.appendChild(Object.assign(document.createElement("script"), {src: "js/grid.js"})));
@@ -120,7 +120,7 @@
     $("mealSum").innerHTML = MEALS.map(m => {
       const list = items.filter(it => (MEALS.includes(it.meal) ? it.meal : "Перекус") === m);
       const sum = list.reduce((s, it) => s + num(it.kcal), 0);
-      return `<div class="ms" data-meal="${m}"><div class="nm">${m}${list.length ? `<small>${esc(list.map(it => it.name).join(", "))}</small>` : ""}</div><span class="kc">${list.length ? fmt(sum) : ""}</span><button class="round sm" data-add="${m}" aria-label="Добавить в ${m}">${ICON_PLUS}</button></div>`;
+      return `<div class="ms" data-meal="${m}"><div class="nm">${m}${list.length ? `<small>${esc(list.map(it => it.short || it.name).join(", "))}</small>` : ""}</div><span class="kc">${list.length ? fmt(sum) : ""}</span><button class="round sm" data-add="${m}" aria-label="Добавить в ${m}">${ICON_PLUS}</button></div>`;
     }).join("");
     renderFoods();
     renderWeek();
@@ -234,6 +234,7 @@
           <label class="fld"><span>Фирма</span><input name="brand" value="${v("brand")}" placeholder="Простоквашино, Lay's…"></label>
           <label class="fld"><span>Магазин</span><input name="store" list="storeList" value="${v("store")}" placeholder="Пятёрочка…"><datalist id="storeList">${STORES.map(s => `<option value="${s}">`).join("")}</datalist></label>
         </div>
+        <label class="fld"><span>Коротко для главного экрана</span><input name="short" value="${v("short")}" placeholder="напр. Ряженка — если название длинное"></label>
         <label class="fld"><span>Категория</span>${catSelect(f ? catOf(f) : "Другое")}</label>
         <div class="grid2">
           <label class="fld"><span>Порция</span><select name="pcName">${PORTIONS.map(p => `<option${p === (f?.pcName || "штука") ? " selected" : ""}>${p}</option>`).join("")}</select></label>
@@ -262,6 +263,7 @@
       if (f?.code) out.code = f.code;
       if (!out.brand) delete out.brand;
       if (!out.store) delete out.store;
+      const sh = String(fd.get("short") || "").trim(); if (sh) out.short = sh;
       foods = isNew ? [out, ...foods] : foods.map(x => x.id === f.id ? out : x);
       renderFoods(); saveFoods((isNew ? "новый продукт: " : "продукт: ") + out.name);
       if (after) after(out);
@@ -290,10 +292,14 @@
   const useN = (u, id) => typeof u[id] === "number" ? u[id] : u[id]?.n || 0;
   const lastG = id => usage()[id]?.g; // сколько граммов брали в прошлый раз
   // items — порции [{food, g}] или id продуктов
-  const bumpUsage = list => { const u = usage(); list.forEach(x => { const id = x?.food ?? x; if (!id) return; u[id] = {...(typeof u[id] === "object" ? u[id] : {}), n: useN(u, id) + 1, g: x?.g ?? u[id]?.g}; }); localStorage.setItem(UKEY, JSON.stringify(u)); };
+  const bumpUsage = list => { const u = usage(); list.forEach(x => { const id = x?.food ?? x; if (!id) return;
+    const o = typeof u[id] === "object" ? u[id] : {}, m = {...(o.m || {})}; if (x?.meal) m[x.meal] = (m[x.meal] || 0) + 1;
+    u[id] = {...o, n: useN(u, id) + 1, g: x?.g ?? o.g, m}; }); localStorage.setItem(UKEY, JSON.stringify(u)); };
   // частые — первыми, при равенстве — прежний порядок
   const byUse = list => { const u = usage(); return list.map((f, i) => [f, i]).sort((a, b) => useN(u, b[0].id) - useN(u, a[0].id) || a[1] - b[1]).map(x => x[0]); };
-  const frequent = () => { const u = usage(); return byUse(foods.filter(f => useN(u, f.id) > 0)).slice(0, 20); };
+  // частые: сначала то, что ели именно в этот приём, затем остальные по общей частоте
+  const frequent = meal => { const u = usage(), inMeal = id => u[id]?.m?.[meal] || 0;
+    return byUse(foods.filter(f => useN(u, f.id) > 0)).sort((a, b) => inMeal(b.id) - inMeal(a.id)).slice(0, 20); };
   // порция продукта: на сколько граммов и что получится
   const portionOf = (f, g) => { const k = g / 100; return {kcal: Math.round(f.kcal * k), p: r1(f.p * k), f: r1(f.f * k), c: r1(f.c * k)}; };
   const defaultG = f => lastG(f.id) || f.pc || 100;
@@ -362,7 +368,11 @@
     offCtl?.abort(); offCtl = new AbortController();
     const r = await offFetch("https://world.openfoodfacts.org/cgi/search.pl?" + new URLSearchParams({search_terms: q, search_simple: 1, json: 1, page_size: 40, fields: OFF_FIELDS}), offCtl.signal);
     if (!r.ok) throw new Error("OFF " + r.status);
-    const out = ((await r.json()).products || []).map(offMap).filter(x => x.name && x.kcal != null);
+    const words = q.toLowerCase().replace(/ё/g, "е").split(/\s+/), myStores = new Set(foods.map(f => f.store).filter(Boolean));
+    const score = x => { const n = x.name.toLowerCase().replace(/ё/g, "е"), h = n + " " + (x.brand || "").toLowerCase();
+      return (n.startsWith(words[0]) ? 4 : 0) + (words.every(w => h.includes(w)) ? 3 : 0) + (x.brand ? 1 : 0) + (myStores.has(x.store) ? 2 : 0) + (x.pc ? 1 : 0); };
+    const out = ((await r.json()).products || []).map(offMap).filter(x => x.name && x.kcal != null)
+      .map((x, i) => [x, score(x), i]).sort((a, b) => b[1] - a[1] || a[2] - b[2]).map(x => x[0]);
     offCache.set(q, out);
     return out;
   }
@@ -388,10 +398,10 @@
       <div id="ares"></div>
       <button class="btn ghost" id="manual">Ввести вручную</button>`);
     // раздел по умолчанию: избранное, иначе недавние, иначе все
-    let sec = frequent().length ? "freq" : foods.some(f => f.fav) ? "fav" : rec.length ? "rec" : "all";
+    let sec = frequent(meal).length ? "freq" : foods.some(f => f.fav) ? "fav" : rec.length ? "rec" : "all";
     const drawSecs = () => {
       const cats = CATS.filter(c => foods.some(f => catOf(f) === c));
-      const list = [...(frequent().length ? [["freq", "Частые"]] : []), ...(foods.some(f => f.fav) ? [["fav", "★ Избранное"]] : []), ...(rec.length ? [["rec", "Недавние"]] : []),
+      const list = [...(frequent(meal).length ? [["freq", "Частые"]] : []), ...(foods.some(f => f.fav) ? [["fav", "★ Избранное"]] : []), ...(rec.length ? [["rec", "Недавние"]] : []),
         ...(combos.length ? [["combos", "Мои блюда"]] : []), ["all", "Все"], ...cats.map(c => [c, c])];
       $("asec").innerHTML = list.map(([k, t]) => `<button class="chip${k === sec ? " on" : ""}" data-sec="${esc(k)}">${esc(t)}</button>`).join("");
       $("asec").hidden = !!$("aq").value.trim(); // при поиске разделы не нужны — ищем везде
@@ -410,7 +420,7 @@
         // без поиска — «Как вчера» сверху и выбранный раздел
         const yItems = (weekDocs[addDays(cur, -1)]?.items || []).filter(x => (MEALS.includes(x.meal) ? x.meal : "Перекус") === meal);
         if (yItems.length) h += `<button class="quick" id="ayest"><span><b>Как вчера</b><small>${esc(yItems.map(x => x.name).join(", "))}</small></span><i>${fmt(yItems.reduce((s, x) => s + num(x.kcal), 0))} ккал</i></button>`;
-        const sel = sec === "freq" ? frequent() : sec === "fav" ? byUse(foods.filter(f => f.fav)) : sec === "all" ? byUse(foods) : CATS.includes(sec) ? byUse(foods.filter(f => catOf(f) === sec)).sort((a, b) => !!b.fav - !!a.fav) : null;
+        const sel = sec === "freq" ? frequent(meal) : sec === "fav" ? byUse(foods.filter(f => f.fav)) : sec === "all" ? byUse(foods) : CATS.includes(sec) ? byUse(foods.filter(f => catOf(f) === sec)).sort((a, b) => !!b.fav - !!a.fav) : null;
         if (sec === "rec") h += rec.length ? `<div class="list">${rec.map(recRow).join("")}</div>` : `<div class="empty">Пока нет недавних</div>`;
         else if (sec === "combos") h += `<div class="list" id="acombos">${combos.map(c => `<div class="swipe"><button class="del" data-cdel="${esc(c.id)}">Удалить</button><button class="item" data-combo="${esc(c.id)}"><div class="nm"><div>${esc(c.name)}</div><small>${esc(c.items.map(x => x.name).join(", "))}</small></div><div class="kc">${fmt(c.items.reduce((s, x) => s + num(x.kcal), 0))}</div><span class="plus">${ICON_PLUS}</span></button></div>`).join("") || `<div class="empty">Нет сохранённых блюд</div>`}</div>`;
         else h += sel.length ? `<div class="list">${sel.map(quickRow).join("")}</div>` : `<div class="empty">Здесь пусто</div>`;
@@ -435,7 +445,7 @@
       const qa = e.target.closest("[data-q]");
       if (qa){
         const f = foods.find(x => x.id === qa.dataset.q), g = defaultG(f);
-        addItem({id: newId("m"), name: foodName(f), meal, time: nowTime(), g, ...portionOf(f, g), food: f.id});
+        addItem({id: newId("m"), name: foodName(f), ...(f.short ? {short: f.short} : {}), meal, time: nowTime(), g, ...portionOf(f, g), food: f.id});
         qa.classList.add("done"); setTimeout(() => qa.classList.remove("done"), 700);
         return;
       }
@@ -461,7 +471,8 @@
   const PORTIONS = ["штука", "порция", "пачка", "упаковка", "стакан", "кусок", "ложка"];
   const pcLabel = f => f.pcName || "штука";
   function amountBox(food, startG, onChange){
-    let unit = (unitPref(food.id) === "pc" && food.pc) ? "pc" : "g";
+    const pref = unitPref(food.id);
+    let unit = food.pc && pref !== "g" ? "pc" : "g"; // есть вес штуки и граммы не выбирали — сразу в порциях
     let pc = num(food.pc) || 0;
     const html = `<div class="chips seg two" id="aunit"><button class="chip" data-u="g">Граммы</button><button class="chip" data-u="pc">Порции</button></div>
       <div class="amt-row"><label class="fld"><span id="alab"></span><input id="pg" inputmode="decimal"></label>
@@ -540,6 +551,7 @@
       const out = {id: newId("m"), name: foodName(food), meal, time: nowTime(), g: r1(g()), ...calc()};
       if (box.pcs()){ out.pcs = box.pcs(); out.pcName = pcLabel(food); }
       if (f.id) out.food = f.id;
+      if (f.short) out.short = f.short;
       rememberUnit(f.id ? f : food, box);
       addItem(out);
       if (pick) closeSheet(); else addSheet(meal); // пришли из окна приёма — возвращаемся туда же
@@ -721,14 +733,24 @@
     root.addEventListener("click", e => { if (mdrag && !e.target.closest(".del")){ e.stopImmediatePropagation(); mdrag = false; } }, true);
   }
 
+  const supsTotal = () => sups.items.reduce((s, it) => s + it.perDay, 0);
+  const supsTaken = () => sups.items.reduce((s, it) => s + Math.min(it.perDay, num(day.sup?.[it.id])), 0);
+  function supSheet(){
+    openSheet(`<h2>Добавки</h2><div class="cap">Анализы ${esc(ruDate(addMonths(sups.start, sups.retestMonths)))}</div><div id="sups2"></div>`);
+    $("sups2").onclick = $("sups").onclick; renderSups();
+  }
   function renderSups(){
     const end = it => addMonths(sups.start, it.months);
-    $("sups").innerHTML = sups.items.map(it => {
+    const tk = supsTaken(), tt = supsTotal();
+    $("supBadge").textContent = tt ? `${tk}/${tt}` : ""; $("supBtn").hidden = !tt; $("supBtn").classList.toggle("done", tt > 0 && tk >= tt);
+    const html = sups.items.map(it => {
       const n = num(day.sup?.[it.id]);
       const done = cur > end(it);
       const dots = Array.from({length: it.perDay}, (_, i) => `<button class="dot${i<n?" on":""}" data-sup="${esc(it.id)}" data-i="${i}" aria-label="Принято ${i+1}">${i<n?"✓":""}</button>`).join("");
       return `<div class="sup"><div class="nm">${esc(it.name)} ${esc(it.dose)}<small>${it.perDay}×/день · ${done ? "курс завершён" : "до " + ruDate(end(it))}</small></div><div class="dots">${dots}</div></div>`;
     }).join("");
+    $("sups").innerHTML = html;
+    if ($("sups2")) $("sups2").innerHTML = html;
     $("supTab").hidden = !sups.items.length;
     $("supInfo").textContent = "Анализы " + ruDate(addMonths(sups.start, sups.retestMonths));
   }
@@ -1023,11 +1045,16 @@
       if (steps){ stripFrom = dx + steps * slot; go(addDays(cur, steps)); } else el.style.transform = ""; });
   })();
   $("dateLbl").onclick = () => go(todayIso());
-  $("wForm").onsubmit = e => {
-    e.preventDefault();
-    const v = Math.round(num($("wIn").value)) || 250; // пусто = стакан 250 мл
-    $("wIn").value = ""; $("wIn").blur();
-    if (v > 0 && v <= 5000){ (waterLog[cur] ||= []).push(v); bumpWater(v); }
+  const addWater = v => { if (v > 0 && v <= 5000){ (waterLog[cur] ||= []).push(v); bumpWater(v); } };
+  $("wForm").onclick = e => { const b = e.target.closest("[data-ml]"); if (b) addWater(num(b.dataset.ml)); };
+  // своё количество — в небольшом окне с цифровой клавиатурой
+  $("wCustom").onclick = () => {
+    openSheet(`<h2>Вода</h2><form id="wcForm"><label class="fld"><span>Сколько, мл</span><input id="wcIn" type="number" inputmode="numeric" min="1" max="5000" placeholder="330" required></label>
+      <div class="chips">${[150, 200, 330, 750, 1000].map(n => `<button type="button" class="chip" data-v="${n}">${n}</button>`).join("")}</div>
+      <button class="btn" type="submit">Добавить</button></form>`);
+    $("sheetBody").querySelectorAll("[data-v]").forEach(b => b.onclick = () => { closeSheet(); addWater(num(b.dataset.v)); });
+    $("wcForm").onsubmit = e => { e.preventDefault(); closeSheet(); addWater(Math.round(num($("wcIn").value))); };
+    setTimeout(() => $("wcIn")?.focus(), 300);
   };
   $("wMinus").onclick = () => bumpWater(-((waterLog[cur] || []).pop() || 250)); // убрать последнюю порцию, иначе 250
   $("newFood").onclick = () => foodForm(null);
@@ -1035,6 +1062,7 @@
   hscroll($("foodCats"));
   $("foodCats").onclick = e => { const b = e.target.closest("[data-cat]"); if (b){ foodCat = b.dataset.cat; renderFoods(); } };
   $("scanBtn").onclick = () => scanSheet();
+  $("supBtn").onclick = supSheet;
   $("foodList").onclick = e => {
     if (e.target.closest("#starterBtn")) return addStarter();
     const s = e.target.closest("[data-star]");
