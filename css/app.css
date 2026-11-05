@@ -833,3 +833,15 @@ section:not([hidden])>*{animation:rise .55s var(--ease-ios) both}
 #aquick .chip,.chips:not(.seg):not(.scroll) .chip{background:var(--gbtn);box-shadow:var(--gbtn-edge);font-weight:500}
 .chips.seg{background:rgba(255,255,255,.035)}
 .chips.seg .chip.on{background:linear-gradient(180deg,rgba(255,255,255,.16),rgba(255,255,255,.08))}
+
+/* ===== ЕДИНЫЙ стиль всех «вкладок»: сегменты и ленты категорий одинаковые ===== */
+/* дорожка: полностью скруглённая, тонкое стекло */
+.chips.seg,.chips.scroll{padding:3px;gap:2px;border-radius:19px;background:rgba(255,255,255,.035);box-shadow:inset 0 0 0 1px rgba(255,255,255,.05)}
+/* лента категорий больше не на всю ширину экрана — такая же дорожка, просто листается */
+.chips.scroll{margin:0 0 12px;display:flex}
+.sheet .chips.scroll{margin-left:0;margin-right:0;padding-left:3px;padding-right:3px}
+/* пункт: одна высота и форма везде; невыбранный — просто текст */
+.chips.seg .chip,.chips.scroll .chip{height:32px;padding:0 14px;border-radius:16px;background:transparent;box-shadow:none;color:rgba(235,235,245,.6);font-size:14px;font-weight:500}
+/* выбранный — тихая светлая подложка, как вкладка в нижней панели */
+.chips.seg .chip.on,.chips.scroll .chip.on{background:linear-gradient(180deg,rgba(255,255,255,.16),rgba(255,255,255,.08));box-shadow:inset 0 1px 0 rgba(255,255,255,.18);color:#fff}
+.wrange.chips.seg .chip{height:28px;border-radius:14px;font-size:13px}
