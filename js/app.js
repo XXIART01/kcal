@@ -1,6 +1,6 @@
 (() => {
   // ---------- constants ----------
-  const VERSION = 26;
+  const VERSION = 27;
   // отладка вёрстки: ?iphone — зоны iPhone 13, ?grid — сетка и размеры блоков
   if (/[?&]iphone/.test(location.search)) document.documentElement.classList.add("sim-iphone");
   if (/[?&]grid/.test(location.search)) addEventListener("load", () => document.head.appendChild(Object.assign(document.createElement("script"), {src: "js/grid.js"})));
@@ -50,6 +50,7 @@
   let day = blank(cur);
   let goals = structuredClone(DEFAULT_GOALS);
   let sups = defaultSups();
+  let combos = []; // мои блюда: {id, name, items:[порции без id/meal/time]}
   let foods = []; // мои продукты: {id, name, brand, kcal, p, f, c — на 100 г, pc — вес 1 шт в г}
   let weekDocs = {};
   let pendingWater = null, waterTimer = null;
@@ -200,7 +201,7 @@
       return;
     }
     $("foodList").innerHTML = starterBtn + CATS.filter(c => list.some(f => catOf(f) === c)).map(c =>
-      `<div class="cap">${c}</div><div class="card">${list.filter(f => catOf(f) === c).map(f => foodRow(f, `data-food="${esc(f.id)}"`)).join("")}</div>`).join("");
+      `<div class="cap">${c}</div><div class="card">${byUse(list.filter(f => catOf(f) === c)).map(f => foodRow(f, `data-food="${esc(f.id)}"`)).join("")}</div>`).join("");
   }
 
   const saveFoods = msg => saveConf("foods.json", foods, msg);
@@ -263,8 +264,24 @@
     const {id, meal, time, ...r} = it;
     localStorage.setItem(RKEY, JSON.stringify([r, ...recent().filter(x => x.name !== r.name)].slice(0, 12)));
   }
+  const UKEY = "kcal_usage";
+  const usage = () => { try { return JSON.parse(localStorage.getItem(UKEY)) || {}; } catch { return {}; } };
+  const bumpUsage = ids => { const u = usage(); ids.forEach(id => { if (id) u[id] = (u[id] || 0) + 1; }); localStorage.setItem(UKEY, JSON.stringify(u)); };
+  // частые — первыми, при равенстве — прежний порядок
+  const byUse = list => { const u = usage(); return list.map((f, i) => [f, i]).sort((a, b) => (u[b[0].id] || 0) - (u[a[0].id] || 0) || a[1] - b[1]).map(x => x[0]); };
+
+  // добавить сразу несколько порций в приём (моё блюдо, «как вчера»)
+  function addMany(list, meal, label){
+    const items = list.map(x => { const {id, meal: _m, time, ...r} = x; return {...r, id: newId("m"), meal, time: nowTime()}; });
+    if (!items.length) return;
+    bumpUsage(items.map(x => x.food));
+    const kcal = items.reduce((s, x) => s + num(x.kcal), 0);
+    mutate({t: "puts", items}, `добавлено (${label}): ${items.map(x => x.name).join(", ")}`);
+    toast(`${label} → ${meal.toLowerCase()} · ${fmt(kcal)} ккал`, "Отменить", () => mutate({t: "dels", ids: items.map(x => x.id)}, "отменено: " + label));
+  }
+
   function addItem(it, msg){
-    remember(it);
+    remember(it); bumpUsage([it.food]);
     toast(`Добавлено в ${String(it.meal).toLowerCase()} · ${fmt(it.kcal)} ккал`, "Отменить", () => mutate({t: "del", id: it.id}, "отменено: " + it.name));
     mutate({t: "put", item: it}, msg || "добавлено: " + it.name);
   }
@@ -323,8 +340,13 @@
     const draw = st => {
       if (!$("aq")) return; // окно уже закрыли, а ответ базы пришёл позже
       const q = $("aq").value.trim();
-      const mine = foods.filter(f => !q || match(f, q)).slice(0, q ? 30 : 8);
+      const mine = (q ? foods : byUse(foods)).filter(f => !q || match(f, q)).slice(0, q ? 30 : 8);
       let h = "";
+      if (!q){
+        const yItems = (weekDocs[addDays(cur, -1)]?.items || []).filter(x => (MEALS.includes(x.meal) ? x.meal : "Перекус") === meal);
+        if (yItems.length) h += `<button class="quick" id="ayest"><span><b>Как вчера</b><small>${esc(yItems.map(x => x.name).join(", "))}</small></span><i>${fmt(yItems.reduce((s, x) => s + num(x.kcal), 0))} ккал</i></button>`;
+        if (combos.length) h += `<div class="cap">Мои блюда</div><div class="list" id="acombos">${combos.map(c => `<div class="swipe"><button class="del" data-cdel="${esc(c.id)}">Удалить</button><button class="item" data-combo="${esc(c.id)}"><div class="nm"><div>${esc(c.name)}</div><small>${esc(c.items.map(x => x.name).join(", "))}</small></div><div class="kc">${fmt(c.items.reduce((s, x) => s + num(x.kcal), 0))}</div><span class="plus">${ICON_PLUS}</span></button></div>`).join("")}</div>`;
+      }
       if (!q && rec.length) h += `<div class="cap">Недавние — нажми, чтобы повторить</div><div class="list">${rec.map((r, i) => `<button class="item" data-rec="${i}"><div class="nm"><div>${esc(r.name)}</div><small>${r.g ? fmt(r.g) + " г · " : ""}Б ${fmt(r.p)} · Ж ${fmt(r.f)} · У ${fmt(r.c)}</small></div><div class="kc">${fmt(r.kcal)}</div><span class="plus">${ICON_PLUS}</span></button>`).join("")}</div>`;
       if (mine.length) h += `<div class="cap">Мои продукты</div><div class="list">${mine.map(f => foodRow(f, `data-my="${esc(f.id)}"`)).join("")}</div>`;
       if (q.length >= 2) h += `<div class="cap">База Open Food Facts</div>` + (st === "load" ? `<div class="empty">Ищу…</div>`
@@ -332,6 +354,7 @@
         : off.length ? `<div class="list">${off.map((f, i) => foodRow(f, `data-off="${i}"`)).join("")}</div>` : `<div class="empty">В базе не нашлось</div>`);
       if (!h) h = `<div class="empty">Начни вводить название или отсканируй штрихкод</div>`;
       $("ares").innerHTML = h;
+      if ($("acombos")) swipeRows($("acombos"));
     };
     draw();
     $("aq").oninput = () => {
@@ -341,6 +364,12 @@
       if (q.length >= 2) offTimer = setTimeout(() => offSearch(q).then(r => { off = r; draw(); }, e => { if (e.name !== "AbortError") draw("err"); }), 450);
     };
     $("ares").onclick = e => {
+      if (e.target.closest("#ayest")){ closeSheet(); return addMany((weekDocs[addDays(cur, -1)]?.items || []).filter(x => (MEALS.includes(x.meal) ? x.meal : "Перекус") === meal), meal, "Как вчера"); }
+      const cd = e.target.closest("[data-cdel]");
+      if (cd){ const c = combos.find(x => x.id === cd.dataset.cdel); combos = combos.filter(x => x.id !== cd.dataset.cdel); saveConf("combos.json", combos, "удалено блюдо: " + (c?.name || "")); return draw(); }
+      const row = e.target.closest(".swipe.open"); if (row) return row.classList.remove("open");
+      const cb = e.target.closest("[data-combo]");
+      if (cb){ const c = combos.find(x => x.id === cb.dataset.combo); closeSheet(); return addMany(c.items, meal, c.name); }
       const b = e.target.closest("[data-my],[data-off],[data-rec]"); if (!b) return;
       if (b.dataset.rec){
         closeSheet();
@@ -447,12 +476,29 @@
     function stopScanTracks(){ stream?.getTracks().forEach(t => t.stop()); }
   }
 
+  // сохранить набор порций одним блюдом («Мой завтрак»)
+  function comboSheet(list, m){
+    openSheet(`<h2>Моё блюдо</h2>
+      <div class="hint">${esc(list.map(x => `${x.name}${x.g ? " " + fmt(x.g) + " г" : ""}`).join(" · "))}</div>
+      <form id="comboForm"><label class="fld"><span>Название</span><input name="name" value="Мой ${esc(m.toLowerCase())}" required></label>
+      <button class="btn" type="submit">Сохранить</button></form>`);
+    $("comboForm").onsubmit = e => {
+      e.preventDefault();
+      const name = String(new FormData(e.target).get("name")).trim() || "Моё блюдо";
+      combos = [{id: newId("b"), name, items: list.map(({id, meal, time, ...r}) => r)}, ...combos];
+      closeSheet(); saveConf("combos.json", combos, "моё блюдо: " + name);
+      toast(`Сохранено: ${name}. Оно появится по «+» у приёма пищи`);
+    };
+  }
+
   function mealSheet(m){
     const list = (day.items || []).filter(it => (MEALS.includes(it.meal) ? it.meal : "Перекус") === m).sort((a,b) => String(a.time||"").localeCompare(String(b.time||"")));
     openSheet(`<h2>${m}</h2>
       <div id="mlist">${list.length ? list.map(it => `<div class="swipe"><button class="del" data-del="${esc(it.id)}">Удалить</button><button class="item" data-id="${esc(it.id)}"><div class="nm"><div>${esc(it.name || "Без названия")}</div><small>${it.g?fmt(it.g)+" г · ":""}Б ${fmt(it.p)} · Ж ${fmt(it.f)} · У ${fmt(it.c)}${it.time?" · "+esc(it.time):""}</small></div><div class="kc">${fmt(it.kcal)}</div></button></div>`).join("") : `<div class="empty">Пока пусто</div>`}</div>
       <div class="hint">Смахни блюдо влево, чтобы удалить</div>
-      <button class="btn" id="madd">Добавить</button>`);
+      <button class="btn" id="madd">Добавить</button>
+      ${list.length > 1 ? `<button class="btn ghost" id="mcombo">Сохранить как моё блюдо</button>` : ""}`);
+    if ($("mcombo")) $("mcombo").onclick = () => comboSheet(list, m);
     $("mlist").onclick = e => {
       const del = e.target.closest("[data-del]");
       if (del){
@@ -567,6 +613,8 @@
     const d = {...doc, items: [...(doc.items || [])], sup: {...(doc.sup || {})}};
     if (op.t === "put") d.items = d.items.some(x => x.id === op.item.id) ? d.items.map(x => x.id === op.item.id ? op.item : x) : [...d.items, op.item];
     if (op.t === "del") d.items = d.items.filter(x => x.id !== op.id);
+    if (op.t === "puts") d.items = [...d.items.filter(x => !op.items.some(n => n.id === x.id)), ...op.items];
+    if (op.t === "dels") d.items = d.items.filter(x => !op.ids.includes(x.id));
     if (op.t === "water") d.water = Math.max(0, num(d.water) + op.add); // shortcut: при обрыве связи после записи прибавка может задвоиться — для воды допустимо
     if (op.t === "sup") d.sup[op.id] = op.n;
     return d;
@@ -875,7 +923,7 @@
       if (day.date) weekDocs[day.date] = day;
       // держим только дни около текущего, чтобы кэш не рос
       const keep = Object.fromEntries(Object.entries(weekDocs).filter(([k]) => Math.abs(parseIso(k) - parseIso(cur)) <= 10 * 864e5));
-      localStorage.setItem(CKEY, JSON.stringify({goals, sups, foods, days: keep}));
+      localStorage.setItem(CKEY, JSON.stringify({goals, sups, foods, combos, days: keep}));
     } catch {}
   }
   function readCache(){ try { return JSON.parse(localStorage.getItem(CKEY)); } catch { return null; } }
@@ -885,14 +933,15 @@
     $("setup").hidden = true; $("app").hidden = false; $("tabbar").hidden = false;
     const c = readCache();
     if (c){
-      goals = {...DEFAULT_GOALS, ...c.goals}; sups = c.sups || sups; foods = c.foods || foods; weekDocs = c.days || {};
+      goals = {...DEFAULT_GOALS, ...c.goals}; sups = c.sups || sups; foods = c.foods || foods; combos = c.combos || []; weekDocs = c.days || {};
       if (weekDocs[cur]) day = {...blank(cur), ...weekDocs[cur]};
       render(); // мгновенно, без серых заготовок
     } else { $("app").classList.add("loading"); render(); } // самый первый запуск
     loadDay(!!c);
     try {
       // настройки, добавки и продукты — параллельно, а не по очереди
-      const [s, su, fo] = await Promise.all(["settings.json", "supplements.json", "foods.json"].map(p => Store.read(p)));
+      const [s, su, fo, co] = await Promise.all(["settings.json", "supplements.json", "foods.json", "combos.json"].map(p => Store.read(p)));
+      if (co) combos = co.data;
       if (!s) await Store.update("settings.json", () => DEFAULT_GOALS, "начальные цели");
       else goals = {...DEFAULT_GOALS, ...s.data, micro: {...DEFAULT_GOALS.micro, ...(s.data.micro || {})}};
       if (!su) await Store.update("supplements.json", () => sups, "добавки");
