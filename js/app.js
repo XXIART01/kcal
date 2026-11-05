@@ -1,6 +1,6 @@
 (() => {
   // ---------- constants ----------
-  const VERSION = 54;
+  const VERSION = 55;
   // iOS отдаёт выбранный в настройках размер текста через системный шрифт -apple-system-body (17 px по умолчанию):
   // масштабируем интерфейс тем же коэффициентом, но не больше 1,3 — иначе главный экран перестанет помещаться
   (() => { const p = document.createElement("span"); p.style.font = "-apple-system-body"; p.style.position = "absolute"; p.style.visibility = "hidden"; p.textContent = "a";
