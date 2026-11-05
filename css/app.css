@@ -672,3 +672,5 @@ section:not([hidden])>*{animation:rise .55s var(--ease-ios) both}
   background:#2c2c34;color:#fff;box-shadow:0 0 0 1.5px #0b0b0e}
 #supBtn.done .badge{background:#34d399;color:#0b0b0e}
 .badge:empty{display:none}
+/* окно приёма пищи — фиксированной высоты, без прыжков при смене раздела */
+.sheet.tall{height:88vh;height:88dvh}

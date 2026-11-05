@@ -1,6 +1,6 @@
 (() => {
   // ---------- constants ----------
-  const VERSION = 42;
+  const VERSION = 43;
   // отладка вёрстки: ?iphone — зоны iPhone 13, ?grid — сетка и размеры блоков
   if (/[?&]iphone/.test(location.search)) document.documentElement.classList.add("sim-iphone");
   if (/[?&]grid/.test(location.search)) addEventListener("load", () => document.head.appendChild(Object.assign(document.createElement("script"), {src: "js/grid.js"})));
@@ -391,6 +391,8 @@
     let off = [];
     const rec = recent();
     curAddMeal = meal;
+    // окно приёма — постоянной высоты: при смене раздела («Молочка» → «Мясо») не прыгает
+    setTimeout(() => $("sheet").classList.add("tall"));
     openSheet(`<h2>${esc(meal)}</h2>
       <div id="acur"></div>
       <div class="search-row"><input class="search" id="aq" type="search" placeholder="Ряженка, творог, банан…" autocomplete="off"><button class="round" id="ascan" aria-label="Сканировать штрихкод">${SCAN_ICON}</button></div>
@@ -864,7 +866,7 @@
   const saveConf = (path, data, msg) => { saveCache(); return Store.update(path, () => data, msg).catch(e => fail("Не сохранилось", e)); };
 
   // ---------- sheets ----------
-  function openSheet(html){ stopScan?.(); const sb = $("sheetBody"); sb.innerHTML = html; sb.classList.remove("swap"); sb.offsetWidth; sb.classList.add("swap"); $("scrim").classList.add("on"); $("sheet").classList.add("on"); }
+  function openSheet(html){ stopScan?.(); $("sheet").classList.remove("tall"); const sb = $("sheetBody"); sb.innerHTML = html; sb.classList.remove("swap"); sb.offsetWidth; sb.classList.add("swap"); $("scrim").classList.add("on"); $("sheet").classList.add("on"); }
   function closeSheet(){ curAddMeal = null; stopScan?.(); $("scrim").classList.remove("on"); $("sheet").classList.remove("on"); $("sheet").style.transform = ""; }
   (() => {
     const sh = $("sheet"); let y0 = null, dy = 0;
