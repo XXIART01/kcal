@@ -581,3 +581,8 @@ section:not([hidden])>*{animation:rise .55s var(--ease-ios) both}
 .big,.tile b,.tile .goal,.w-num,.ms .kc,.ms small,.sub,.ring .mid{transition:color .2s ease,opacity .2s ease}
 .loading .tile .goal em{visibility:hidden}
 .loading .big{text-shadow:none}
+
+/* выбор приёма пищи в окне порции — сегмент из 4 равных кнопок */
+.chips.seg{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:0 0 12px}
+.chips.seg .chip{padding:0 4px;font-size:13px}
+.lib-hint{margin:-4px 4px 12px}

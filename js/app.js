@@ -1,6 +1,6 @@
 (() => {
   // ---------- constants ----------
-  const VERSION = 24;
+  const VERSION = 25;
   // отладка вёрстки: ?iphone — зоны iPhone 13, ?grid — сетка и размеры блоков
   if (/[?&]iphone/.test(location.search)) document.documentElement.classList.add("sim-iphone");
   if (/[?&]grid/.test(location.search)) addEventListener("load", () => document.head.appendChild(Object.assign(document.createElement("script"), {src: "js/grid.js"})));
@@ -225,7 +225,8 @@
           <label class="fld"><span>Ж, г</span><input name="f" inputmode="decimal" value="${v("f")}"></label>
           <label class="fld"><span>У, г</span><input name="c" inputmode="decimal" value="${v("c")}"></label>
         </div>
-        <button class="btn" type="submit">Сохранить</button>
+        ${!after ? `<button class="btn" type="submit" data-then="add">Сохранить и добавить в день</button>` : ""}
+        <button class="btn${!after ? " ghost" : ""}" type="submit">Сохранить</button>
         ${!isNew ? `<button class="btn danger" type="button" id="delFood">Удалить</button>` : ""}
       </form>`);
     const form = $("foodForm"), sel = form.elements.cat;
@@ -241,7 +242,9 @@
       if (!out.brand) delete out.brand;
       foods = isNew ? [out, ...foods] : foods.map(x => x.id === f.id ? out : x);
       renderFoods(); saveFoods((isNew ? "новый продукт: " : "продукт: ") + out.name);
-      if (after) after(out); else closeSheet();
+      if (after) after(out);
+      else if (e.submitter?.dataset.then === "add") portionSheet(out, null, false);
+      else closeSheet();
     };
     if (!isNew){
       const b = $("delFood");
@@ -350,20 +353,30 @@
   }
 
   function portionSheet(food, meal, fromBase){
+    const pick = !meal; // пришли из «Моих продуктов»: приём выбирается здесь
+    meal ||= guessMeal();
+    const dayName = cur === todayIso() ? "сегодня" : ruDate(cur);
     openSheet(`<h2>${esc(food.name)}</h2>
       <div class="hint">${food.brand ? esc(food.brand) + " · " : ""}на 100 г: ${per100(food)}</div>
+      ${pick ? `<div class="cap">Приём пищи · ${esc(dayName)}</div><div class="chips seg" id="pmeal">${MEALS.map(m => `<button class="chip${m === meal ? " on" : ""}" data-m="${m}">${m}</button>`).join("")}</div>` : ""}
       <label class="fld"><span>Сколько, г</span><input id="pg" inputmode="decimal" value="${food.pc || 100}"></label>
       ${food.pc ? `<div class="chips">${[1,2,3].map(n => `<button class="chip" data-n="${n}">${n} шт</button>`).join("")}</div>` : ""}
       <div class="res" id="pres"></div>
       ${fromBase ? `<label class="chk"><input type="checkbox" id="psave" checked> Сохранить в мои продукты</label>
         <label class="fld" id="pcatW"><span>Категория</span>${catSelect(food.cat || guessCat(food.name), "pcat")}</label>` : ""}
-      <button class="btn" id="padd">Добавить в ${esc(meal.toLowerCase())}</button>`);
+      <button class="btn" id="padd">Добавить в ${esc(meal.toLowerCase())}</button>
+      ${pick && food.id ? `<button class="btn ghost" id="pedit">Изменить продукт</button>` : ""}`);
+    if (pick){
+      $("pmeal").onclick = e => { const b = e.target.closest("[data-m]"); if (!b) return; meal = b.dataset.m;
+        $("pmeal").querySelectorAll(".chip").forEach(x => x.classList.toggle("on", x === b)); $("padd").textContent = "Добавить в " + meal.toLowerCase(); };
+      if ($("pedit")) $("pedit").onclick = () => foodForm(food);
+    }
     const g = () => num(String($("pg").value).replace(",", "."));
     const calc = () => { const k = g() / 100; return {kcal: Math.round(food.kcal * k), p: r1(food.p * k), f: r1(food.f * k), c: r1(food.c * k)}; };
     const show = () => { const c = calc(); $("pres").innerHTML = `<b>${fmt(c.kcal)}</b> ккал · Б ${fmt(c.p,1)} · Ж ${fmt(c.f,1)} · У ${fmt(c.c,1)}`; };
     show(); $("pg").oninput = show;
     if (fromBase) $("psave").onchange = e => $("pcatW").hidden = !e.target.checked;
-    $("sheetBody").querySelectorAll(".chip").forEach(b => b.onclick = () => { $("pg").value = r1(food.pc * b.dataset.n); show(); });
+    $("sheetBody").querySelectorAll(".chip[data-n]").forEach(b => b.onclick = () => { $("pg").value = r1(food.pc * b.dataset.n); show(); });
     $("padd").onclick = () => {
       if (!(g() > 0)) return $("pg").focus();
       let f = food;
@@ -734,7 +747,7 @@
   })();
   $("foodCats").onclick = e => { const b = e.target.closest("[data-cat]"); if (b){ foodCat = b.dataset.cat; renderFoods(); } };
   $("scanBtn").onclick = () => scanSheet();
-  $("foodList").onclick = e => { if (e.target.closest("#starterBtn")) return addStarter(); const b = e.target.closest("[data-food]"); if (b) foodForm(foods.find(f => f.id === b.dataset.food)); };
+  $("foodList").onclick = e => { if (e.target.closest("#starterBtn")) return addStarter(); const b = e.target.closest("[data-food]"); if (b) portionSheet(foods.find(f => f.id === b.dataset.food), null, false); };
   $("mealSum").onclick = e => {
     const a = e.target.closest("[data-add]"); if (a) return addSheet(a.dataset.add);
     const r = e.target.closest(".ms"); if (r) mealSheet(r.dataset.meal);
