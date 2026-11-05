@@ -1,6 +1,6 @@
 (() => {
   // ---------- constants ----------
-  const VERSION = 46;
+  const VERSION = 47;
   // iOS отдаёт выбранный в настройках размер текста через системный шрифт -apple-system-body (17 px по умолчанию):
   // масштабируем интерфейс тем же коэффициентом, но не больше 1,3 — иначе главный экран перестанет помещаться
   (() => { const p = document.createElement("span"); p.style.font = "-apple-system-body"; p.style.position = "absolute"; p.style.visibility = "hidden"; p.textContent = "a";
@@ -55,6 +55,7 @@
   let day = blank(cur);
   let goals = structuredClone(DEFAULT_GOALS);
   let sups = defaultSups();
+  let weights = []; // [{date, kg}] — вес по дням, по возрастанию даты
   let combos = []; // мои блюда: {id, name, items:[порции без id/meal/time]}
   let foods = []; // мои продукты: {id, name, brand, kcal, p, f, c — на 100 г, pc — вес 1 шт в г}
   let weekDocs = {};
@@ -638,6 +639,90 @@
     };
   }
 
+  // ================= ПРОГРЕСС: вес и неделя =================
+  // тренд веса — сглаживание (как в «умных» весах): не скачет от воды и соли
+  const trendOf = list => { let t = null; return list.map(w => (t = t == null ? w.kg : t + 0.25 * (w.kg - t))); };
+  const kgFmt = v => fmt(v, 1).replace(".", ",");
+  function weightAt(daysAgo){ const d = addDays(todayIso(), -daysAgo); let r = null; for (const w of weights) if (w.date <= d) r = w; return r; }
+
+  function renderWeight(){
+    const box = $("wCard"); if (!box) return;
+    if (!weights.length){
+      box.innerHTML = `<div class="cap">Вес</div><div class="empty">Добавь вес — здесь появится график и тренд</div><button class="btn" id="wAdd">Записать вес</button>`;
+      return void ($("wAdd").onclick = weightSheet);
+    }
+    const list = weights.slice(-60), tr = trendOf(list), last = list[list.length - 1], tNow = tr[tr.length - 1];
+    const ago = weightAt(30), diff = ago && ago.date !== last.date ? last.kg - ago.kg : null;
+    const goal = num(goals.weightGoal);
+    // график: точки — замеры, линия — тренд
+    const W = 300, Hh = 110, pad = 6, vals = [...list.map(w => w.kg), ...tr, ...(goal ? [goal] : [])];
+    const lo = Math.min(...vals) - 0.5, hi = Math.max(...vals) + 0.5;
+    const x = i => pad + (list.length === 1 ? (W - 2 * pad) / 2 : i * (W - 2 * pad) / (list.length - 1));
+    const y = v => pad + (hi - v) / (hi - lo) * (Hh - 2 * pad);
+    const line = tr.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join("");
+    box.innerHTML = `<div class="cap row">Вес<button class="linkbtn inline" id="wAdd">+ Записать</button></div>
+      <div class="wrow"><b class="big2">${kgFmt(last.kg)}<small> кг</small></b>
+        <span class="wmeta">${diff != null ? `<em class="${diff <= 0 ? "down" : "up"}">${diff > 0 ? "+" : diff < 0 ? "−" : ""}${kgFmt(Math.abs(diff))} кг</em> за 30 дней<br>` : ""}тренд ${kgFmt(tNow)} кг${goal ? ` · до цели ${kgFmt(Math.max(0, tNow - goal))} кг` : ""}</span></div>
+      <svg class="wchart" viewBox="0 0 ${W} ${Hh}" preserveAspectRatio="none" role="img" aria-label="График веса: сейчас ${kgFmt(last.kg)} кг, тренд ${kgFmt(tNow)} кг">
+        ${goal ? `<line x1="0" x2="${W}" y1="${y(goal)}" y2="${y(goal)}" class="goal"/>` : ""}
+        <path d="${line}" class="trend"/>
+        ${list.map((w, i) => `<circle cx="${x(i).toFixed(1)}" cy="${y(w.kg).toFixed(1)}" r="2.6" class="pt"/>`).join("")}
+      </svg>
+      <div class="wlegend"><span><i class="pt"></i>замеры</span><span><i class="tr"></i>тренд</span>${goal ? `<span><i class="gl"></i>цель ${kgFmt(goal)}</span>` : ""}</div>`;
+    $("wAdd").onclick = weightSheet;
+  }
+
+  function weightSheet(){
+    const last = weights[weights.length - 1], today = weights.find(w => w.date === todayIso());
+    openSheet(`<h2>Вес сегодня</h2>
+      <form id="wForm2"><label class="fld"><span>Вес, кг</span><input id="wkg" inputmode="decimal" value="${today ? kgFmt(today.kg) : last ? kgFmt(last.kg) : ""}" placeholder="88,4" required></label>
+      <label class="fld"><span>Цель, кг (необязательно)</span><input id="wgoal" inputmode="decimal" value="${goals.weightGoal ? kgFmt(goals.weightGoal) : ""}" placeholder="80"></label>
+      <div class="hint">Лучше взвешиваться утром натощак. Тренд сглаживает скачки от воды и соли.</div>
+      <button class="btn" type="submit">Сохранить</button></form>`);
+    $("wForm2").onsubmit = e => {
+      e.preventDefault();
+      const kg = r1(String($("wkg").value).replace(",", ".")), g = r1(String($("wgoal").value).replace(",", "."));
+      if (!(kg > 20 && kg < 400)) return $("wkg").focus();
+      weights = [...weights.filter(w => w.date !== todayIso()), {date: todayIso(), kg}].sort((a, b) => a.date.localeCompare(b.date));
+      saveConf("weights.json", weights, `вес ${kg} кг`);
+      if ((g || 0) !== (goals.weightGoal || 0)){ goals = {...goals, weightGoal: g > 0 ? g : undefined}; saveConf("settings.json", goals, "цель по весу"); }
+      closeSheet(); renderWeight(); toast(`Вес записан: ${kgFmt(kg)} кг`);
+    };
+    setTimeout(() => $("wkg")?.select(), 350);
+  }
+
+  // неделя: 7 дней до сегодня; пустые дни (без записей) в средние не входят
+  async function renderWeekStats(){
+    const box = $("weekCard"); if (!box) return;
+    const days = Array.from({length: 7}, (_, i) => addDays(todayIso(), i - 6));
+    const docOf = d => d === cur ? day : weekDocs[d];
+    const need = days.filter(d => !docOf(d));
+    if (need.length){
+      box.innerHTML = `<div class="cap">Неделя</div><div class="empty">Считаю…</div>`;
+      const got = await Promise.all(need.map(d => Store.read(dayPath(d)).then(r => r?.data, () => null)));
+      need.forEach((d, i) => { if (got[i]) weekDocs[d] = got[i]; });
+    }
+    const st = days.map(d => { const doc = docOf(d) || {}; return {d, t: totals(doc.items), water: num(doc.water), has: (doc.items || []).length > 0}; });
+    const logged = st.filter(x => x.has), n = logged.length, g = goals;
+    const avg = k => n ? logged.reduce((s, x) => s + x.t[k], 0) / n : 0;
+    const inNorm = logged.filter(x => x.t.kcal <= g.kcal * 1.05).length;
+    const avgWater = st.filter(x => x.water > 0).reduce((s, x, _, a) => s + x.water / a.length, 0);
+    const maxK = Math.max(g.kcal * 1.25, ...st.map(x => x.t.kcal));
+    box.innerHTML = `<div class="cap row">Неделя<span>${n ? `записи за ${n} ${plural(n, "день", "дня", "дней")}` : "нет записей"}</span></div>
+      <div class="wstats">
+        <div><small>Ср. калории</small><b>${fmt(avg("kcal"))}</b><i>из ${fmt(g.kcal)}</i></div>
+        <div><small>Ср. белок</small><b>${fmt(avg("p"))}<span> г</span></b><i>из ${fmt(g.p)} г</i></div>
+        <div><small>В норме</small><b>${inNorm}<span> из ${n}</span></b><i>${plural(inNorm, "день", "дня", "дней")}</i></div>
+        <div><small>Ср. вода</small><b>${fmt(avgWater / 1000, 1)}<span> л</span></b><i>из ${fmt(g.water / 1000, 1)} л</i></div>
+      </div>
+      <div class="wbars" role="img" aria-label="Калории по дням за неделю">
+        <div class="gline" style="bottom:${20 + g.kcal / maxK * 100}px"></div>
+        ${st.map(x => { const h = x.t.kcal / maxK * 100, over = x.t.kcal > g.kcal * 1.05, gh = Math.min(x.t.kcal, g.kcal) / maxK * 100;
+          return `<div class="wb${x.d === todayIso() ? " today" : ""}" title="${fmt(x.t.kcal)} ккал"><div class="col" style="height:${gh}%"></div>${over ? `<div class="col ov" style="height:${h - gh}%;bottom:${gh}%"></div>` : ""}<span>${esc(parseIso(x.d).toLocaleDateString("ru-RU", {weekday: "short"}))}</span></div>`; }).join("")}
+      </div>`;
+  }
+  const renderProg = () => { renderWeight(); renderWeekStats(); };
+
   // нажатие на приём пищи и «+» открывают одно окно (раньше было два шага)
   function mealSheet(m){ addSheet(m); }
 
@@ -1121,6 +1206,7 @@
     clearTimeout(tabTimer);
     tabTimer = setTimeout(() => {
       document.querySelectorAll("section[data-tab]").forEach(x => { x.classList.remove("leaving"); x.hidden = x.dataset.tab !== b.dataset.tab; });
+      if (b.dataset.tab === "prog") renderProg();
       scrollTo(0, 0);
     }, matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 140);
   };
@@ -1155,7 +1241,7 @@
       if (day.date) weekDocs[day.date] = day;
       // держим только дни около текущего, чтобы кэш не рос
       const keep = Object.fromEntries(Object.entries(weekDocs).filter(([k]) => Math.abs(parseIso(k) - parseIso(cur)) <= 10 * 864e5));
-      localStorage.setItem(CKEY, JSON.stringify({goals, sups, foods, combos, days: keep}));
+      localStorage.setItem(CKEY, JSON.stringify({goals, sups, foods, combos, weights, days: keep}));
     } catch {}
   }
   function readCache(){ try { return JSON.parse(localStorage.getItem(CKEY)); } catch { return null; } }
@@ -1165,15 +1251,16 @@
     $("setup").hidden = true; $("app").hidden = false; $("tabbar").hidden = false;
     const c = readCache();
     if (c){
-      goals = {...DEFAULT_GOALS, ...c.goals}; sups = c.sups || sups; foods = c.foods || foods; combos = c.combos || []; weekDocs = c.days || {};
+      goals = {...DEFAULT_GOALS, ...c.goals}; sups = c.sups || sups; foods = c.foods || foods; combos = c.combos || []; weights = c.weights || []; weekDocs = c.days || {};
       if (weekDocs[cur]) day = {...blank(cur), ...weekDocs[cur]};
       render(); // мгновенно, без серых заготовок
     } else { $("app").classList.add("loading"); render(); } // самый первый запуск
     loadDay(!!c);
     try {
       // настройки, добавки и продукты — параллельно, а не по очереди
-      const [s, su, fo, co] = await Promise.all(["settings.json", "supplements.json", "foods.json", "combos.json"].map(p => Store.read(p)));
+      const [s, su, fo, co, we] = await Promise.all(["settings.json", "supplements.json", "foods.json", "combos.json", "weights.json"].map(p => Store.read(p)));
       if (co) combos = co.data;
+      if (we) weights = we.data;
       if (!s) await Store.update("settings.json", () => DEFAULT_GOALS, "начальные цели");
       else goals = {...DEFAULT_GOALS, ...s.data, micro: {...DEFAULT_GOALS.micro, ...(s.data.micro || {})}};
       if (!su) await Store.update("supplements.json", () => sups, "добавки");
