@@ -1,6 +1,6 @@
 (() => {
   // ---------- constants ----------
-  const VERSION = 57;
+  const VERSION = 58;
   // iOS отдаёт выбранный в настройках размер текста через системный шрифт -apple-system-body (17 px по умолчанию):
   // масштабируем интерфейс тем же коэффициентом, но не больше 1,3 — иначе главный экран перестанет помещаться
   (() => { const p = document.createElement("span"); p.style.font = "-apple-system-body"; p.style.position = "absolute"; p.style.visibility = "hidden"; p.textContent = "a";
@@ -143,7 +143,8 @@
   // как продукт называется везде: «Творог 5% · Простоквашино» (без фирмы семь творогов не различить)
   const foodName = f => f.brand ? `${f.name} · ${f.brand}` : f.name;
   // метки под названием: магазин; «без фирмы» — у общих справочных продуктов, чтобы не путать с конкретными
-  const storeTag = f => (f.store ? `<span class="tag">${esc(f.store)}</span>` : "") ;
+  // метки под названием: магазин; «≈ сверить» — КБЖУ примерные, их стоит сверить с упаковкой
+  const storeTag = f => (f.store ? `<span class="tag">${esc(f.store)}</span>` : "") + (f.approx ? `<span class="tag warn">≈ сверить</span>` : "");
   const STORES = ["Пятёрочка", "Перекрёсток", "Самокат", "ВкусВилл", "Магнит", "Лента", "Ашан", "Яндекс Лавка", "Озон фреш"];
   // все слова запроса есть в названии или бренде
   // все слова запроса есть в названии, фирме или магазине (ё = е)
@@ -271,7 +272,7 @@
       const fd = new FormData(form), n = k => r1(String(fd.get(k) ?? "").replace(",", "."));
       const out = {id: f?.id || newId("f"), name: String(fd.get("name")).trim(), brand: String(fd.get("brand")).trim(), store: String(fd.get("store") || "").trim(), cat: !touched && fd.get("cat") === "Другое" ? guessCat(fd.get("name")) : fd.get("cat"), kcal: n("kcal"), p: n("p"), f: n("f"), c: n("c")};
       if (n("pc") > 0){ out.pc = n("pc"); if (fd.get("pcName") !== "штука") out.pcName = fd.get("pcName"); }
-      if (f?.code) out.code = f.code;
+      if (f?.code) out.code = f.code; // сохранили вручную — значения считаются проверенными (метки «≈» нет)
       if (!out.brand) delete out.brand;
       if (!out.store) delete out.store;
       const sh = String(fd.get("short") || "").trim(); if (sh) out.short = sh;
