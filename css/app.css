@@ -800,3 +800,22 @@ section:not([hidden])>*{animation:rise .55s var(--ease-ios) both}
 .bar{gap:0}
 .bar>.cut{border-radius:4px 0 0 4px}
 .bar>.ov{border-radius:0 4px 4px 0}
+
+/* подвкладки «Прогресса» и период графика */
+.chips.seg.three{grid-template-columns:repeat(3,1fr)}
+#progSeg{margin:0 0 12px}
+.wrange{margin:10px 0 0}
+.wrange .chip{height:28px;font-size:12px}
+.hist-m{margin:14px 0 2px}
+.hist-m:first-child{margin-top:0}
+/* лента столбиков: 4 недели, листается, подпись — день недели и число */
+.wbars-scroll{overflow:hidden;margin:0 -4px;padding:0 4px;touch-action:pan-y}
+.wbars{display:grid;grid-template-columns:repeat(28,1fr);gap:6px;height:140px;padding-bottom:32px}
+.wb{display:block;padding:0}
+.wb span{bottom:-32px;line-height:14px;font-size:11px}
+.wb span b{display:block;font-size:12px;font-weight:600;color:rgba(235,235,245,.75)}
+.wb.today span b{color:#fff}
+.wb.sel .col{opacity:1;box-shadow:0 0 0 1.5px #fff}
+.wsel{margin:4px 0 8px;min-height:18px}
+.wsel #wSel{font-size:12px;color:var(--mute)}
+.wsel #wSel b{color:#fff;font-weight:600}

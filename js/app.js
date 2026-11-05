@@ -1,6 +1,6 @@
 (() => {
   // ---------- constants ----------
-  const VERSION = 52;
+  const VERSION = 54;
   // iOS отдаёт выбранный в настройках размер текста через системный шрифт -apple-system-body (17 px по умолчанию):
   // масштабируем интерфейс тем же коэффициентом, но не больше 1,3 — иначе главный экран перестанет помещаться
   (() => { const p = document.createElement("span"); p.style.font = "-apple-system-body"; p.style.position = "absolute"; p.style.visibility = "hidden"; p.textContent = "a";
@@ -641,6 +641,7 @@
   }
 
   // ================= ПРОГРЕСС: вес и неделя =================
+  let wRange = 90; // период графика веса, дней (0 — всё время)
   // тренд веса — сглаживание (как в «умных» весах): не скачет от воды и соли
   const trendOf = list => { let t = null; return list.map(w => (t = t == null ? w.kg : t + 0.25 * (w.kg - t))); };
   const kgFmt = v => fmt(v, 1).replace(".", ",");
@@ -654,7 +655,8 @@
       box.innerHTML = `<div class="cap">Вес</div><div class="empty">Добавь вес — здесь появится график и тренд</div><button class="btn" id="wAdd">Записать вес</button>`;
       return void ($("wAdd").onclick = () => weightSheet());
     }
-    const list = weights.slice(-60), tr = trendOf(list), last = list[list.length - 1], tNow = tr[tr.length - 1];
+    const trAll = trendOf(weights), from = wRange ? addDays(todayIso(), -wRange) : "", i0 = Math.max(0, weights.findIndex(w => w.date >= from));
+    const list = weights.slice(i0), tr = trAll.slice(i0), last = list[list.length - 1], tNow = tr[tr.length - 1];
     const ago = weightAt(30), diff = ago && ago.date !== last.date ? last.kg - ago.kg : null;
     const goal = num(goals.weightGoal), rate = weeklyRate();
     // график: точки — замеры, линия — тренд
@@ -671,10 +673,14 @@
         <path d="${line}" class="trend"/>
         ${list.map((w, i) => `<circle cx="${x(i).toFixed(1)}" cy="${y(w.kg).toFixed(1)}" r="2.6" class="pt"/>`).join("")}
       </svg>
+      <div class="chips seg three wrange" id="wRange">${[[30, "30 дней"], [90, "90 дней"], [0, "Всё"]].map(([v, t]) => `<button class="chip${v === wRange ? " on" : ""}" data-r="${v}">${t}</button>`).join("")}</div>
       <div class="wlegend"><span><i class="pt"></i>замеры</span><span><i class="tr"></i>тренд</span>${goal ? `<span><i class="gl"></i>цель ${kgFmt(goal)}</span>` : ""}</div>
       <button class="goalrow" id="wGoal">${goal ? `Цель: <b>${kgFmt(goal)} кг</b>` : "Задать цель по весу"}<svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16zM14 6l4 4"/></svg></button>
-      <div class="whist">${weights.slice(-5).reverse().map(w => `<button class="whrow" data-wd="${w.date}"><span>${esc(w.date === todayIso() ? "Сегодня" : ruDate(w.date))}</span><b>${kgFmt(w.kg)} кг</b></button>`).join("")}</div>`;
+      <div class="whist">${weights.slice(-3).reverse().map(w => `<button class="whrow" data-wd="${w.date}"><span>${esc(w.date === todayIso() ? "Сегодня" : ruDate(w.date))}</span><b>${kgFmt(w.kg)} кг</b></button>`).join("")}</div>
+      ${weights.length > 3 ? `<button class="goalrow" id="wAll">Вся история · ${weights.length}<svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>` : ""}`;
     $("wAdd").onclick = () => weightSheet();
+    if ($("wAll")) $("wAll").onclick = () => historySheet("w");
+    $("wRange").onclick = e => { const b = e.target.closest("[data-r]"); if (b){ wRange = num(b.dataset.r); renderWeight(); } };
     $("wGoal").onclick = goalSheet;
     box.querySelector(".whist").onclick = e => { const b = e.target.closest("[data-wd]"); if (b) weightSheet(weights.find(w => w.date === b.dataset.wd)); };
   }
@@ -753,8 +759,10 @@
     box.innerHTML = `<div class="cap row">Замеры тела<button class="addpill" id="mAdd" aria-label="Записать замеры"><svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Записать</button></div>
       <div class="hint">Последний раз — ${esc(ruDate(last.date))}. Изменение — с первого замера${measures.length > 1 ? ` (${esc(ruDate(measures[0].date))})` : ""}.</div>
       <div class="mlist">${rows}</div>
-      <div class="whist" id="mHist">${measures.slice(-6).reverse().map(m => `<button class="whrow" data-md="${m.date}" aria-label="Замер ${esc(ruDate(m.date))}, изменить"><span>${esc(m.date === todayIso() ? "Сегодня" : ruDate(m.date))}</span><small>${esc(MEAS.filter(([k]) => m[k] > 0).slice(0, 2).map(([k, n]) => `${n.toLowerCase()} ${fmt(m[k], 1)}`).join(" · "))}</small></button>`).join("")}</div>`;
+      <div class="whist" id="mHist">${measures.slice(-3).reverse().map(m => `<button class="whrow" data-md="${m.date}" aria-label="Замер ${esc(ruDate(m.date))}, изменить"><span>${esc(m.date === todayIso() ? "Сегодня" : ruDate(m.date))}</span><small>${esc(MEAS.filter(([k]) => m[k] > 0).slice(0, 2).map(([k, n]) => `${n.toLowerCase()} ${fmt(m[k], 1)}`).join(" · "))}</small></button>`).join("")}</div>
+      ${measures.length > 3 ? `<button class="goalrow" id="mAll">Вся история · ${measures.length}<svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>` : ""}`;
     $("mAdd").onclick = () => measSheet();
+    if ($("mAll")) $("mAll").onclick = () => historySheet("m");
     $("mHist").onclick = e => { const b = e.target.closest("[data-md]"); if (b) measSheet(measures.find(m => m.date === b.dataset.md)); };
   }
   function measSheet(entry){
@@ -772,28 +780,30 @@
       MEAS.forEach(([k]) => { const v = r1(String(fd.get(k) || "").replace(",", ".")); if (v > 0) m[k] = v; });
       if (Object.keys(m).length < 2) return e.target.querySelector("input[name]").focus();
       measures = [...measures.filter(x => x.date !== d && x.date !== entry?.date), m].sort((a, b) => a.date.localeCompare(b.date));
-      saveConf("measures.json", measures, `замеры ${d}`); closeSheet(); renderMeasures(); toast("Замеры записаны");
+      saveConf("measures.json", measures, `замеры ${d}`); closeSheet(); renderProg(); toast("Замеры записаны");
     };
-    if (entry) $("mdel").onclick = () => { measures = measures.filter(x => x.date !== entry.date); saveConf("measures.json", measures, `удалён замер ${entry.date}`); closeSheet(); renderMeasures(); };
+    if (entry) $("mdel").onclick = () => { measures = measures.filter(x => x.date !== entry.date); saveConf("measures.json", measures, `удалён замер ${entry.date}`); closeSheet(); renderProg(); };
   }
 
   // неделя: 7 дней до сегодня; пустые дни (без записей) в средние не входят
   async function renderWeekStats(){
     const box = $("weekCard"); if (!box) return;
-    const days = Array.from({length: 7}, (_, i) => addDays(todayIso(), i - 6));
+    const days28 = Array.from({length: 28}, (_, i) => addDays(todayIso(), i - 27)), days = days28.slice(-7);
     const docOf = d => d === cur ? day : weekDocs[d];
-    const need = days.filter(d => !docOf(d));
+    const need = days28.filter(d => !docOf(d));
     if (need.length){
       box.innerHTML = `<div class="cap">Неделя</div><div class="empty">Считаю…</div>`;
       const got = await Promise.all(need.map(d => Store.read(dayPath(d)).then(r => r?.data, () => null)));
-      need.forEach((d, i) => { if (got[i]) weekDocs[d] = got[i]; });
+      need.forEach((d, i) => { weekDocs[d] = got[i] || {items: []}; });
     }
+    const dayStat = d => { const doc = docOf(d) || {}; return {d, t: totals(doc.items), water: num(doc.water), has: (doc.items || []).length > 0}; };
+    const st28 = days28.map(dayStat);
     const st = days.map(d => { const doc = docOf(d) || {}; return {d, t: totals(doc.items), water: num(doc.water), has: (doc.items || []).length > 0}; });
     const logged = st.filter(x => x.has), n = logged.length, g = goals;
     const avg = k => n ? logged.reduce((s, x) => s + x.t[k], 0) / n : 0;
     const inNorm = logged.filter(x => x.t.kcal <= g.kcal * 1.05).length;
     const avgWater = st.filter(x => x.water > 0).reduce((s, x, _, a) => s + x.water / a.length, 0);
-    const maxK = Math.max(g.kcal * 1.25, ...st.map(x => x.t.kcal));
+    const maxK = Math.max(g.kcal * 1.25, ...st28.map(x => x.t.kcal));
     box.innerHTML = `<div class="cap row">Неделя<span>${n ? `записи за ${n} ${plural(n, "день", "дня", "дней")}` : "нет записей"}</span></div>
       <div class="wstats">
         <div><small>Ср. калории</small><b>${fmt(avg("kcal"))}</b><i>из ${fmt(g.kcal)}</i></div>
@@ -801,11 +811,19 @@
         <div><small>В норме</small><b>${inNorm}<span> из ${n}</span></b><i>${plural(inNorm, "день", "дня", "дней")}</i></div>
         <div><small>Ср. вода</small><b>${fmt(avgWater / 1000, 1)}<span> л</span></b><i>из ${fmt(g.water / 1000, 1)} л</i></div>
       </div>
-      <div class="wbars" role="img" aria-label="Калории по дням за неделю">
-        <div class="gline" style="bottom:${20 + g.kcal / maxK * 100}px"></div>
-        ${st.map(x => { const h = x.t.kcal / maxK * 100, over = x.t.kcal > g.kcal * 1.05, gh = Math.min(x.t.kcal, g.kcal) / maxK * 100;
-          return `<div class="wb${x.d === todayIso() ? " today" : ""}" title="${fmt(x.t.kcal)} ккал"><div class="col${over ? " cut" : ""}" style="height:${gh}%"></div>${over ? `<div class="col ov" style="height:${h - gh}%;bottom:${gh}%"></div>` : ""}<span>${esc(parseIso(x.d).toLocaleDateString("ru-RU", {weekday: "short"}))}</span></div>`; }).join("")}
-      </div>`;
+      <div class="cap row wsel"><span id="wSel">Калории по дням · листай влево</span></div>
+      <div class="wbars-scroll" id="wbScroll"><div class="wbars" style="width:${days28.length * 40}px" role="img" aria-label="Калории по дням за 4 недели">
+        <div class="gline" style="bottom:${32 + g.kcal / maxK * 100}px"></div>
+        ${st28.map(x => { const h = x.t.kcal / maxK * 100, over = x.t.kcal > g.kcal * 1.05, gh = Math.min(x.t.kcal, g.kcal) / maxK * 100, dt = parseIso(x.d);
+          const lbl = dt.getDate() === 1 ? dt.toLocaleDateString("ru-RU", {month: "short"}).replace(".", "") : esc(dt.toLocaleDateString("ru-RU", {weekday: "short"}));
+          return `<button class="wb${x.d === todayIso() ? " today" : ""}" data-bd="${x.d}" aria-label="${esc(ruDate(x.d))}: ${fmt(x.t.kcal)} ккал"><div class="col${over ? " cut" : ""}" style="height:${gh}%"></div>${over ? `<div class="col ov" style="height:${h - gh}%;bottom:${gh}%"></div>` : ""}<span>${lbl}<b>${dt.getDate()}</b></span></button>`; }).join("")}
+      </div></div>`;
+    // лента открывается на сегодняшнем дне; нажатие на столбик — дата и калории
+    const sc = $("wbScroll"); hscroll(sc); sc.scrollLeft = sc.scrollWidth;
+    sc.onclick = e => { const b = e.target.closest("[data-bd]"); if (!b) return; const x = st28.find(y => y.d === b.dataset.bd);
+      sc.querySelectorAll(".wb.sel").forEach(y => y.classList.remove("sel")); b.classList.add("sel");
+      const dn = parseIso(x.d).toLocaleDateString("ru-RU", {weekday: "short", day: "numeric", month: "long"});
+      $("wSel").innerHTML = `${esc(dn.charAt(0).toUpperCase() + dn.slice(1))} — <b>${x.has ? fmt(x.t.kcal) + " ккал" : "нет записей"}</b>${x.has ? ` · Б ${fmt(x.t.p)} · Ж ${fmt(x.t.f)} · У ${fmt(x.t.c)}` : ""}`; };
   }
   // последние 6 недель (пн–вс): средние калории по дням с записями, средний вес и изменение к прошлой неделе
   async function renderWeeks(){
@@ -834,7 +852,28 @@
         <span class="${r.dW < 0 ? "down" : r.dW > 0 ? "up" : ""}">${r.dW != null ? signed(r.dW) : "—"}</span></div>`).join("")}</div>
       <div class="hint">Калории — среднее по дням с записями; вес — среднее за неделю; ± — к прошлой неделе.</div>` : `<div class="empty">Появится, когда будут записи за несколько недель</div>`);
   }
-  const renderProg = () => { renderWeight(); renderMeasures(); renderWeekStats(); renderWeeks(); };
+  // внутри «Прогресса» — по одной теме на экране, чтобы не листать длинную ленту
+  let progSec = "w";
+  const PROG_CARDS = {w: ["wCard"], m: ["measCard"], n: ["weekCard", "weeksCard"]};
+  function renderProg(){
+    $("progSeg").querySelectorAll("[data-ps]").forEach(b => { const on = b.dataset.ps === progSec; b.classList.toggle("on", on); b.setAttribute("aria-selected", on); });
+    Object.entries(PROG_CARDS).forEach(([k, ids]) => ids.forEach(id => $(id).hidden = k !== progSec));
+    if (progSec === "w") renderWeight(); else if (progSec === "m") renderMeasures(); else { renderWeekStats(); renderWeeks(); }
+  }
+
+  // вся история (вес или замеры) — в отдельном окне, по месяцам; нажатие — правка
+  function historySheet(kind){
+    const list = (kind === "w" ? weights : measures).slice().reverse();
+    let month = "";
+    const rows = list.map(x => {
+      const m = parseIso(x.date).toLocaleDateString("ru-RU", {month: "long", year: "numeric"});
+      const head = m !== month ? `<div class="cap hist-m">${esc(m.charAt(0).toUpperCase() + m.slice(1))}</div>` : ""; month = m;
+      const val = kind === "w" ? `<b>${kgFmt(x.kg)} кг</b>` : `<small>${esc(MEAS.filter(([k]) => x[k] > 0).map(([k, n]) => `${n.toLowerCase()} ${fmt(x[k], 1)}`).join(" · "))}</small>`;
+      return `${head}<button class="whrow" data-hd="${x.date}"><span>${esc(parseIso(x.date).toLocaleDateString("ru-RU", {day: "numeric", month: "long", weekday: "short"}))}</span>${val}</button>`;
+    }).join("");
+    openSheet(`<h2>${kind === "w" ? "История веса" : "История замеров"}</h2><div class="hint">${list.length} ${plural(list.length, "запись", "записи", "записей")}. Нажми, чтобы исправить или удалить.</div><div class="whist" id="hAll">${rows}</div>`);
+    $("hAll").onclick = e => { const b = e.target.closest("[data-hd]"); if (!b) return; kind === "w" ? weightSheet(weights.find(w => w.date === b.dataset.hd)) : measSheet(measures.find(m => m.date === b.dataset.hd)); };
+  }
 
   // нажатие на приём пищи и «+» открывают одно окно (раньше было два шага)
   function mealSheet(m){ addSheet(m); }
@@ -1298,6 +1337,7 @@
   hscroll($("foodCats"));
   $("foodCats").onclick = e => { const b = e.target.closest("[data-cat]"); if (b){ foodCat = b.dataset.cat; renderFoods(); } };
   $("scanBtn").onclick = () => scanSheet();
+  $("progSeg").onclick = e => { const b = e.target.closest("[data-ps]"); if (b && b.dataset.ps !== progSec){ progSec = b.dataset.ps; renderProg(); scrollTo(0, 0); } };
   $("supBtn").onclick = supSheet;
   $("foodList").onclick = e => {
     if (e.target.closest("#starterBtn")) return addStarter();
