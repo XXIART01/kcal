@@ -1,6 +1,6 @@
 (() => {
   // ---------- constants ----------
-  const VERSION = 49;
+  const VERSION = 50;
   // iOS отдаёт выбранный в настройках размер текста через системный шрифт -apple-system-body (17 px по умолчанию):
   // масштабируем интерфейс тем же коэффициентом, но не больше 1,3 — иначе главный экран перестанет помещаться
   (() => { const p = document.createElement("span"); p.style.font = "-apple-system-body"; p.style.position = "absolute"; p.style.visibility = "hidden"; p.textContent = "a";
@@ -663,7 +663,7 @@
     const x = i => pad + (list.length === 1 ? (W - 2 * pad) / 2 : i * (W - 2 * pad) / (list.length - 1));
     const y = v => pad + (hi - v) / (hi - lo) * (Hh - 2 * pad);
     const line = tr.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join("");
-    box.innerHTML = `<div class="cap row">Вес<button class="linkbtn inline" id="wAdd">+ Записать</button></div>
+    box.innerHTML = `<div class="cap row">Вес<button class="addpill" id="wAdd" aria-label="Записать вес"><svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Записать</button></div>
       <div class="wrow"><b class="big2">${kgFmt(last.kg)}<small> кг</small></b>
         <span class="wmeta">${diff != null ? `<em class="${diff <= 0 ? "down" : "up"}">${signed(diff)} кг</em> за 30 дней<br>` : ""}тренд ${kgFmt(tNow)} кг${rate != null ? ` · ${signed(rate)} кг/нед` : ""}${goal ? `<br>до цели ${kgFmt(Math.max(0, tNow - goal))} кг${rate < 0 && tNow > goal ? ` · ≈ ${Math.ceil((tNow - goal) / -rate)} нед.` : ""}` : ""}</span></div>
       <svg class="wchart" viewBox="0 0 ${W} ${Hh}" preserveAspectRatio="none" role="img" aria-label="График веса: сейчас ${kgFmt(last.kg)} кг, тренд ${kgFmt(tNow)} кг">
@@ -740,7 +740,7 @@
   function renderMeasures(){
     const box = $("measCard"); if (!box) return;
     if (!measures.length){
-      box.innerHTML = `<div class="cap row">Замеры тела<button class="linkbtn inline" id="mAdd">+ Записать</button></div><div class="empty">Талия, бёдра, грудь, бицепс, бедро, шея — раз в 1–2 недели, утром</div>`;
+      box.innerHTML = `<div class="cap row">Замеры тела<button class="addpill" id="mAdd" aria-label="Записать замеры"><svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Записать</button></div><div class="empty">Талия, бёдра, грудь, бицепс, бедро, шея — раз в 1–2 недели, утром</div>`;
       return void ($("mAdd").onclick = () => measSheet());
     }
     const last = measures[measures.length - 1];
@@ -750,10 +750,10 @@
       const first = vals[0], d = cur[k] - first[k];
       return `<div class="mrow"><span>${n}</span>${spark(vals.map(m => m[k]), d <= 0 ? "down" : "up")}<b>${fmt(cur[k], 1)}<small> см</small></b><em class="${d < 0 ? "down" : d > 0 ? "up" : ""}">${vals.length > 1 ? signed(d) : "—"}</em></div>`;
     }).join("");
-    box.innerHTML = `<div class="cap row">Замеры тела<button class="linkbtn inline" id="mAdd">+ Записать</button></div>
+    box.innerHTML = `<div class="cap row">Замеры тела<button class="addpill" id="mAdd" aria-label="Записать замеры"><svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Записать</button></div>
       <div class="hint">Последний раз — ${esc(ruDate(last.date))}. Изменение — с первого замера${measures.length > 1 ? ` (${esc(ruDate(measures[0].date))})` : ""}.</div>
       <div class="mlist">${rows}</div>
-      ${measures.length ? `<button class="linkbtn" id="mEdit">Изменить последний замер</button>` : ""}`;
+      ${measures.length ? `<button class="goalrow" id="mEdit">Изменить последний замер<svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16zM14 6l4 4"/></svg></button>` : ""}`;
     $("mAdd").onclick = () => measSheet();
     $("mEdit").onclick = () => measSheet(last);
   }
