@@ -1,6 +1,6 @@
 (() => {
   // ---------- constants ----------
-  const VERSION = 45;
+  const VERSION = 46;
   // iOS отдаёт выбранный в настройках размер текста через системный шрифт -apple-system-body (17 px по умолчанию):
   // масштабируем интерфейс тем же коэффициентом, но не больше 1,3 — иначе главный экран перестанет помещаться
   (() => { const p = document.createElement("span"); p.style.font = "-apple-system-body"; p.style.position = "absolute"; p.style.visibility = "hidden"; p.textContent = "a";
@@ -748,7 +748,7 @@
   const supsTaken = () => sups.items.reduce((s, it) => s + Math.min(it.perDay, num(day.sup?.[it.id])), 0);
   function supSheet(){
     openSheet(`<h2>Добавки</h2><div class="cap">Повторные анализы — ${esc(ruDate(addMonths(sups.start, sups.retestMonths)))}</div><div id="sups2"></div>`);
-    $("sups2").onclick = $("sups").onclick; renderSups();
+    $("sups2").onclick = supClick; renderSups();
   }
   function renderSups(){
     const end = it => addMonths(sups.start, it.months);
@@ -760,10 +760,7 @@
       const dots = Array.from({length: it.perDay}, (_, i) => `<button class="dot${i<n?" on":""}" data-sup="${esc(it.id)}" data-i="${i}" aria-label="Принято ${i+1}">${i<n?"✓":""}</button>`).join("");
       return `<div class="sup"><div class="nm">${esc(it.name)} ${esc(it.dose)}<small>${it.perDay}×/день · ${done ? "курс завершён" : "до " + ruDate(end(it))}</small></div><div class="dots">${dots}</div></div>`;
     }).join("");
-    $("sups").innerHTML = html;
     if ($("sups2")) $("sups2").innerHTML = html;
-    $("supTab").hidden = !sups.items.length;
-    $("supInfo").textContent = "Повторные анализы — " + ruDate(addMonths(sups.start, sups.retestMonths));
   }
 
   // неделя пн–вс, в которую попадает cur; кольцо = доля нормы калорий
@@ -1130,7 +1127,8 @@
   new ResizeObserver(() => { const b = document.querySelector("#tabbar button.on"); if (b) movePill(b); }).observe($("tabbar"));
   $("settingsBtn").onclick = settingsSheet;
   $("week").onclick = e => { const b = e.target.closest(".day"); if (b && b.dataset.d !== cur) go(b.dataset.d); };
-  $("sups").onclick = e => {
+  // отметки добавок — в окне по кнопке с капсулой в шапке (отдельной вкладки больше нет)
+  function supClick(e){
     const b = e.target.closest(".dot"); if (!b) return;
     const id = b.dataset.sup, i = Number(b.dataset.i);
     const n = num(day.sup?.[id]) === i + 1 ? i : i + 1;
