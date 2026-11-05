@@ -675,3 +675,57 @@ section:not([hidden])>*{animation:rise .55s var(--ease-ios) both}
 /* окно приёма пищи — фиксированной высоты, без прыжков при смене раздела */
 .sheet.tall{height:88vh;height:88dvh}
 .linkbtn.inline{display:inline;margin:0;padding:0;color:#fff;text-decoration:underline;text-underline-offset:3px}
+
+/* ===================== доступность и полировка (ревью) ===================== */
+/* размер текста iPhone: --dt ставится из системного шрифта (1 — обычный размер) */
+.wrap,.sheet,.tabbar,.toast{zoom:var(--dt,1)}
+
+/* окно: видимая кнопка «Закрыть» */
+.sheet-x{position:absolute;right:12px;top:12px;width:32px;height:32px;border-radius:50%;display:grid;place-items:center;z-index:2;
+  background:rgba(255,255,255,.08);color:rgba(235,235,245,.8)}
+.sheet-x .ico{width:16px;height:16px;stroke-width:2.4}
+.sheet-x::after{content:"";position:absolute;inset:-6px}
+.sheet h2{padding-right:44px}
+.sheet h2:focus{outline:none}
+/* приём пищи — кнопка на всю левую часть строки */
+.ms button.nm{flex:1;min-width:0;text-align:left;display:block;color:inherit}
+.ms button.nm small{display:block}
+.ms button.nm:focus-visible,.item:focus-visible,.chip:focus-visible,.round:focus-visible,.icon-btn:focus-visible,.btn:focus-visible,.qadd:focus-visible,.day:focus-visible{outline:2px solid #7aa7ff;outline-offset:2px}
+
+/* контраст: тихий текст не бледнее 60%, подписи — 70% (≈ 5,9:1 и 7:1 на плашках) */
+:root{--mute:rgba(235,235,245,.7);--faint:rgba(235,235,245,.6)}
+/* минимальный размер текста — 11–12 px */
+.day.d1{font-size:12px}
+.day.d2,.day.d3{font-size:11px}
+.day{color:rgba(235,235,245,.62)}
+.tabbar button{font-size:12px}
+.tag{font-size:12px}
+/* зоны нажатия 44×44 при прежнем виде: кнопки шапки и кружки дней */
+.icon-btn::after,.day::after{content:"";position:absolute;left:50%;top:50%;width:44px;height:44px;transform:translate(-50%,-50%)}
+.day{position:relative}
+
+/* iPhone SE и другие невысокие экраны: компактнее, чтобы день помещался */
+@media (max-height:700px){
+  .top{height:40px;margin-bottom:8px}
+  .title{font-size:22px;line-height:24px}
+  .days{margin-bottom:8px}
+  .hero{padding:12px 16px}
+  .big{font-size:36px;line-height:38px}
+  .ring{width:80px;height:80px}
+  .ring svg{width:80px;height:80px}
+  .tile{min-height:0;padding:10px 12px}
+  .tile b{font-size:20px;line-height:24px}
+  .bar{margin-top:8px}
+  .row-card{min-height:0;padding:8px 16px}
+  .ms{min-height:44px;padding:5px 0}
+  .card,.tiles{margin-bottom:6px}
+}
+
+/* «+» везде одного вида */
+.qadd .ico,.item .plus{background:var(--gbtn);box-shadow:var(--gbtn-edge)}
+/* меньше одновременных акцентов: кромка вкладки и нижнее свечение тише */
+.tab-pill::after{opacity:.55}
+.tab-pill::before{opacity:.18}
+.bg::before{opacity:.45}
+/* счётчик добавок крупнее и не упирается в иконку */
+.badge{right:-8px;top:-6px;min-width:26px;height:18px;line-height:18px;font-size:11px;padding:0 5px}

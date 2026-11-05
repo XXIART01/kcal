@@ -1,6 +1,11 @@
 (() => {
   // ---------- constants ----------
-  const VERSION = 44;
+  const VERSION = 45;
+  // iOS отдаёт выбранный в настройках размер текста через системный шрифт -apple-system-body (17 px по умолчанию):
+  // масштабируем интерфейс тем же коэффициентом, но не больше 1,3 — иначе главный экран перестанет помещаться
+  (() => { const p = document.createElement("span"); p.style.font = "-apple-system-body"; p.style.position = "absolute"; p.style.visibility = "hidden"; p.textContent = "a";
+    document.documentElement.appendChild(p); const fs = parseFloat(getComputedStyle(p).fontSize); p.remove();
+    if (fs > 0 && p.style.font) document.documentElement.style.setProperty("--dt", Math.min(1.3, Math.max(1, fs / 17)).toFixed(3)); })();
   // отладка вёрстки: ?iphone — зоны iPhone 13, ?grid — сетка и размеры блоков
   if (/[?&]iphone/.test(location.search)) document.documentElement.classList.add("sim-iphone");
   if (/[?&]grid/.test(location.search)) addEventListener("load", () => document.head.appendChild(Object.assign(document.createElement("script"), {src: "js/grid.js"})));
@@ -57,9 +62,13 @@
   let inflight = 0;
 
   const setStatus = (t, e) => { const s = $("status"); s.textContent = t || ""; s.className = "status" + (e ? " err" : ""); };
+  // 1 блюдо, 2 блюда, 5 блюд
+  const plural = (n, one, few, many) => { const a = Math.abs(n) % 100, b = a % 10; return a > 10 && a < 20 ? many : b === 1 ? one : b > 1 && b < 5 ? few : many; };
   const fail = (what, e) => {
     if (e?.code === 401){ Store.clearToken(); showSetup("Токен не принят GitHub (401). Вставь новый."); return; }
-    setStatus(`${what}: ${e?.message || e}`, true);
+    // понятным языком, без кодов: что случилось и что делать
+    setStatus(what === "Не сохранилось" ? "Не получилось сохранить. Проверь интернет — запись осталась на телефоне, отправлю позже."
+      : "Не получилось загрузить данные. Проверь интернет и потяни экран вниз, чтобы повторить.", true);
   };
 
   // ---------- totals ----------
@@ -120,7 +129,7 @@
     $("mealSum").innerHTML = MEALS.map(m => {
       const list = items.filter(it => (MEALS.includes(it.meal) ? it.meal : "Перекус") === m);
       const sum = list.reduce((s, it) => s + num(it.kcal), 0);
-      return `<div class="ms" data-meal="${m}"><div class="nm">${m}${list.length ? `<small>${esc(list.map(it => it.short || it.name).join(", "))}</small>` : ""}</div><span class="kc">${list.length ? fmt(sum) : ""}</span><button class="round sm" data-add="${m}" aria-label="Добавить в ${m}">${ICON_PLUS}</button></div>`;
+      return `<div class="ms" data-meal="${m}"><button class="nm" aria-label="${m}${list.length ? `: ${fmt(sum)} ккал, ${list.length} ${plural(list.length, "блюдо", "блюда", "блюд")}` : ", пусто"}">${m}${list.length ? `<small>${esc(list.map(it => it.short || it.name).join(", "))}</small>` : ""}</button><span class="kc" aria-hidden="true">${list.length ? fmt(sum) : ""}</span><button class="round sm" data-add="${m}" aria-label="Добавить в ${m}">${ICON_PLUS}</button></div>`;
     }).join("");
     renderFoods();
     renderWeek();
@@ -132,7 +141,7 @@
   // как продукт называется везде: «Творог 5% · Простоквашино» (без фирмы семь творогов не различить)
   const foodName = f => f.brand ? `${f.name} · ${f.brand}` : f.name;
   // метки под названием: магазин; «без фирмы» — у общих справочных продуктов, чтобы не путать с конкретными
-  const storeTag = f => (f.store ? `<span class="tag">${esc(f.store)}</span>` : "") + (!f.brand && f.kcal != null && !f.code ? `<span class="tag dim">без фирмы</span>` : "");
+  const storeTag = f => (f.store ? `<span class="tag">${esc(f.store)}</span>` : "") ;
   const STORES = ["Пятёрочка", "Перекрёсток", "Самокат", "ВкусВилл", "Магнит", "Лента", "Ашан", "Яндекс Лавка", "Озон фреш"];
   // все слова запроса есть в названии или бренде
   // все слова запроса есть в названии, фирме или магазине (ё = е)
@@ -395,7 +404,7 @@
     setTimeout(() => $("sheet").classList.add("tall"));
     openSheet(`<h2>${esc(meal)}</h2>
       <div id="acur"></div>
-      <div class="search-row"><input class="search" id="aq" type="search" placeholder="Ряженка, творог, банан…" autocomplete="off"><button class="round" id="ascan" aria-label="Сканировать штрихкод">${SCAN_ICON}</button><button class="round" id="manual" aria-label="Ввести вручную"><svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16zM14 6l4 4"/></svg></button></div>
+      <div class="search-row"><input class="search" id="aq" type="search" placeholder="Ряженка, творог, банан…" aria-label="Поиск продукта" autocomplete="off"><button class="round" id="ascan" aria-label="Сканировать штрихкод">${SCAN_ICON}</button><button class="round" id="manual" aria-label="Ввести вручную"><svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16zM14 6l4 4"/></svg></button></div>
       <div class="chips scroll" id="asec"></div>
       <div id="ares"></div>`);
     // раздел по умолчанию: избранное, иначе недавние, иначе все
@@ -640,7 +649,7 @@
     const list = (day.items || []).filter(it => (MEALS.includes(it.meal) ? it.meal : "Перекус") === m).sort((a,b) => String(a.time||"").localeCompare(String(b.time||"")));
     if (!list.length){ box.innerHTML = ""; return; }
     box.innerHTML = `<div class="cap row">Уже в ${esc(m.toLowerCase())}е<span>${fmt(list.reduce((s, x) => s + num(x.kcal), 0))} ккал</span></div>
-      <div class="list cur" id="mlist">${list.map(it => `<div class="swipe"><button class="del" data-del="${esc(it.id)}">Удалить</button><button class="item" data-id="${esc(it.id)}"><div class="nm"><div>${esc(it.name || "Без названия")}</div><small>${it.pcs ? `${fmt(it.pcs, 1)} × ${esc(it.pcName || "шт")} · ` : ""}${it.g?fmt(it.g)+" г · ":""}Б ${fmt(it.p)} · Ж ${fmt(it.f)} · У ${fmt(it.c)}</small></div><div class="kc">${fmt(it.kcal)}</div></button></div>`).join("")}</div>
+      <div class="list cur" id="mlist">${list.map(it => `<div class="swipe"><button class="del" data-del="${esc(it.id)}" aria-label="Удалить ${esc(it.name || "блюдо")}">Удалить</button><button class="item" data-id="${esc(it.id)}"><div class="nm"><div>${esc(it.name || "Без названия")}</div><small>${it.pcs ? `${fmt(it.pcs, 1)} × ${esc(it.pcName || "шт")} · ` : ""}${it.g?fmt(it.g)+" г · ":""}Б ${fmt(it.p)} · Ж ${fmt(it.f)} · У ${fmt(it.c)}</small></div><div class="kc">${fmt(it.kcal)}</div></button></div>`).join("")}</div>
       ${list.length > 1 ? `<button class="linkbtn" id="mcombo">Сохранить как моё блюдо</button>` : ""}`;
     if ($("mcombo")) $("mcombo").onclick = () => comboSheet(list, m);
     $("mlist").onclick = e => {
@@ -738,7 +747,7 @@
   const supsTotal = () => sups.items.reduce((s, it) => s + it.perDay, 0);
   const supsTaken = () => sups.items.reduce((s, it) => s + Math.min(it.perDay, num(day.sup?.[it.id])), 0);
   function supSheet(){
-    openSheet(`<h2>Добавки</h2><div class="cap">Анализы ${esc(ruDate(addMonths(sups.start, sups.retestMonths)))}</div><div id="sups2"></div>`);
+    openSheet(`<h2>Добавки</h2><div class="cap">Повторные анализы — ${esc(ruDate(addMonths(sups.start, sups.retestMonths)))}</div><div id="sups2"></div>`);
     $("sups2").onclick = $("sups").onclick; renderSups();
   }
   function renderSups(){
@@ -754,7 +763,7 @@
     $("sups").innerHTML = html;
     if ($("sups2")) $("sups2").innerHTML = html;
     $("supTab").hidden = !sups.items.length;
-    $("supInfo").textContent = "Анализы " + ruDate(addMonths(sups.start, sups.retestMonths));
+    $("supInfo").textContent = "Повторные анализы — " + ruDate(addMonths(sups.start, sups.retestMonths));
   }
 
   // неделя пн–вс, в которую попадает cur; кольцо = доля нормы калорий
@@ -841,7 +850,7 @@
       setStatus(""); saveCache();
     } catch (e){
       if (e?.code === 401) fail("Не сохранилось", e);
-      else setStatus(`Нет связи — ${pending.length} ${pending.length === 1 ? "запись сохранена" : "записей сохранено"} на телефоне, отправлю позже`);
+      else setStatus(`Нет связи — ${pending.length} ${plural(pending.length, "запись сохранена", "записи сохранены", "записей сохранено")} на телефоне, отправлю позже`);
     } finally { flushing = false; }
   }
   addEventListener("online", flush);
@@ -866,8 +875,22 @@
   const saveConf = (path, data, msg) => { saveCache(); return Store.update(path, () => data, msg).catch(e => fail("Не сохранилось", e)); };
 
   // ---------- sheets ----------
-  function openSheet(html){ stopScan?.(); $("sheet").classList.remove("tall"); const sb = $("sheetBody"); sb.innerHTML = html; sb.classList.remove("swap"); sb.offsetWidth; sb.classList.add("swap"); $("scrim").classList.add("on"); $("sheet").classList.add("on"); }
-  function closeSheet(){ curAddMeal = null; stopScan?.(); $("scrim").classList.remove("on"); $("sheet").classList.remove("on"); $("sheet").style.transform = ""; }
+  let sheetOpener = null;
+  function openSheet(html){
+    stopScan?.(); const sh = $("sheet"), wasOpen = sh.classList.contains("on");
+    if (!wasOpen) sheetOpener = document.activeElement;
+    sh.classList.remove("tall"); const sb = $("sheetBody"); sb.innerHTML = html; sb.classList.remove("swap"); sb.offsetWidth; sb.classList.add("swap");
+    const h = sb.querySelector("h2"); if (h){ h.id = "sheetTitle"; h.tabIndex = -1; }
+    $("scrim").classList.add("on"); sh.classList.add("on");
+    $("scroller").inert = true; $("tabbar").inert = true; // VoiceOver и Tab не уходят под окно
+    // фокус на заголовок окна, когда окно уже видно (раньше — браузер не даёт сфокусировать)
+    setTimeout(() => { const t = $("sheetTitle"); if (t && !sb.contains(document.activeElement)) t.focus({preventScroll: true}); }, 320);
+  }
+  function closeSheet(){
+    curAddMeal = null; stopScan?.(); $("scrim").classList.remove("on"); $("sheet").classList.remove("on"); $("sheet").style.transform = "";
+    $("scroller").inert = false; $("tabbar").inert = false;
+    if (sheetOpener?.isConnected) sheetOpener.focus({preventScroll: true}); sheetOpener = null;
+  }
   (() => {
     const sh = $("sheet"); let y0 = null, dy = 0;
     sh.addEventListener("touchstart", e => { y0 = sh.scrollTop <= 0 && !e.target.closest(".swipe,.chips") ? e.touches[0].clientY : null; dy = 0; }, {passive: true});
@@ -900,6 +923,8 @@
     });
   })();
   $("scrim").onclick = closeSheet;
+  $("sheetX").onclick = closeSheet;
+  addEventListener("keydown", e => { if (e.key === "Escape" && $("sheet").classList.contains("on")) closeSheet(); });
 
   const nowTime = () => { const d = new Date(); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
   const guessMeal = () => { const h = new Date().getHours(); return h < 11 ? "Завтрак" : h < 16 ? "Обед" : h < 21 ? "Ужин" : "Перекус"; };
