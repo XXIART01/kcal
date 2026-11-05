@@ -34,8 +34,8 @@
     const w = f.contentWindow;
     w.document.querySelectorAll("link[rel=stylesheet]").forEach(l => l.href = l.href.split("?")[0] + "?v=" + Date.now()); // и стили свежие
     const p = n => String(n).padStart(2, "0"), iso = d => `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;
-    const db = {"settings.json": {kcal: 1900, p: 160, f: 60, c: 180, water: 1500},
-      "foods.json": [{id:"s1",name:"Творог 5%",cat:"Молочка",kcal:121,p:17,f:5,c:1.8},{id:"s9",name:"Куриное филе",cat:"Мясо, рыба, яйца",kcal:110,p:23,f:1.2,c:0},{id:"s21",name:"Банан",cat:"Овощи и фрукты",kcal:96,p:1.5,f:.2,c:21.8,pc:120}]};
+    const db = {"settings.json": {kcal: 1900, p: 160, f: 60, c: 180, water: 1500}};
+    // foods.json нет — приложение само положит базовый набор (33 продукта, все категории)
     for (let i = 2; i < 4; i++){ const d = new Date(); d.setDate(d.getDate() - i); db[`days/${iso(d)}.json`] = {items: [{id: "x", kcal: 1200 + i * 300}]}; }
     // пример дня — вчера (среда): Б 180 · Ж 70 · У 210 — все три выше нормы
     const wed = new Date(); wed.setDate(wed.getDate() - 1);

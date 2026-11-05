@@ -1,6 +1,6 @@
 (() => {
   // ---------- constants ----------
-  const VERSION = 28;
+  const VERSION = 33;
   // отладка вёрстки: ?iphone — зоны iPhone 13, ?grid — сетка и размеры блоков
   if (/[?&]iphone/.test(location.search)) document.documentElement.classList.add("sim-iphone");
   if (/[?&]grid/.test(location.search)) addEventListener("load", () => document.head.appendChild(Object.assign(document.createElement("script"), {src: "js/grid.js"})));
@@ -124,6 +124,7 @@
     }).join("");
     renderFoods();
     renderWeek();
+    renderCur();
   }
 
   const r1 = v => Math.round(num(v) * 10) / 10;
@@ -275,22 +276,29 @@
   }
   const UKEY = "kcal_usage";
   const usage = () => { try { return JSON.parse(localStorage.getItem(UKEY)) || {}; } catch { return {}; } };
-  const bumpUsage = ids => { const u = usage(); ids.forEach(id => { if (id) u[id] = (u[id] || 0) + 1; }); localStorage.setItem(UKEY, JSON.stringify(u)); };
+  const useN = (u, id) => typeof u[id] === "number" ? u[id] : u[id]?.n || 0;
+  const lastG = id => usage()[id]?.g; // сколько граммов брали в прошлый раз
+  // items — порции [{food, g}] или id продуктов
+  const bumpUsage = list => { const u = usage(); list.forEach(x => { const id = x?.food ?? x; if (!id) return; u[id] = {n: useN(u, id) + 1, g: x?.g ?? u[id]?.g}; }); localStorage.setItem(UKEY, JSON.stringify(u)); };
   // частые — первыми, при равенстве — прежний порядок
-  const byUse = list => { const u = usage(); return list.map((f, i) => [f, i]).sort((a, b) => (u[b[0].id] || 0) - (u[a[0].id] || 0) || a[1] - b[1]).map(x => x[0]); };
+  const byUse = list => { const u = usage(); return list.map((f, i) => [f, i]).sort((a, b) => useN(u, b[0].id) - useN(u, a[0].id) || a[1] - b[1]).map(x => x[0]); };
+  const frequent = () => { const u = usage(); return byUse(foods.filter(f => useN(u, f.id) > 0)).slice(0, 20); };
+  // порция продукта: на сколько граммов и что получится
+  const portionOf = (f, g) => { const k = g / 100; return {kcal: Math.round(f.kcal * k), p: r1(f.p * k), f: r1(f.f * k), c: r1(f.c * k)}; };
+  const defaultG = f => lastG(f.id) || f.pc || 100;
 
   // добавить сразу несколько порций в приём (моё блюдо, «как вчера»)
   function addMany(list, meal, label){
     const items = list.map(x => { const {id, meal: _m, time, ...r} = x; return {...r, id: newId("m"), meal, time: nowTime()}; });
     if (!items.length) return;
-    bumpUsage(items.map(x => x.food));
+    bumpUsage(items);
     const kcal = items.reduce((s, x) => s + num(x.kcal), 0);
     mutate({t: "puts", items}, `добавлено (${label}): ${items.map(x => x.name).join(", ")}`);
     toast(`${label} → ${meal.toLowerCase()} · ${fmt(kcal)} ккал`, "Отменить", () => mutate({t: "dels", ids: items.map(x => x.id)}, "отменено: " + label));
   }
 
   function addItem(it, msg){
-    remember(it); bumpUsage([it.food]);
+    remember(it); bumpUsage([it]);
     toast(`Добавлено в ${String(it.meal).toLowerCase()} · ${fmt(it.kcal)} ккал`, "Отменить", () => mutate({t: "del", id: it.id}, "отменено: " + it.name));
     mutate({t: "put", item: it}, msg || "добавлено: " + it.name);
   }
@@ -342,27 +350,48 @@
   function addSheet(meal){
     let off = [];
     const rec = recent();
+    curAddMeal = meal;
     openSheet(`<h2>${esc(meal)}</h2>
+      <div id="acur"></div>
       <div class="search-row"><input class="search" id="aq" type="search" placeholder="Ряженка, творог, банан…" autocomplete="off"><button class="round" id="ascan" aria-label="Сканировать штрихкод">${SCAN_ICON}</button></div>
+      <div class="chips scroll" id="asec"></div>
       <div id="ares"></div>
       <button class="btn ghost" id="manual">Ввести вручную</button>`);
+    // раздел по умолчанию: избранное, иначе недавние, иначе все
+    let sec = frequent().length ? "freq" : foods.some(f => f.fav) ? "fav" : rec.length ? "rec" : "all";
+    const drawSecs = () => {
+      const cats = CATS.filter(c => foods.some(f => catOf(f) === c));
+      const list = [...(frequent().length ? [["freq", "Частые"]] : []), ...(foods.some(f => f.fav) ? [["fav", "★ Избранное"]] : []), ...(rec.length ? [["rec", "Недавние"]] : []),
+        ...(combos.length ? [["combos", "Мои блюда"]] : []), ["all", "Все"], ...cats.map(c => [c, c])];
+      $("asec").innerHTML = list.map(([k, t]) => `<button class="chip${k === sec ? " on" : ""}" data-sec="${esc(k)}">${esc(t)}</button>`).join("");
+      $("asec").hidden = !!$("aq").value.trim(); // при поиске разделы не нужны — ищем везде
+    };
+    hscroll($("asec"));
+    $("asec").onclick = e => { const b = e.target.closest("[data-sec]"); if (!b) return; sec = b.dataset.sec; drawSecs(); draw(); };
+    // строка продукта: нажатие — выбрать граммы; «+» справа — добавить сразу прошлой порцией (окно не закрывается)
+    const quickRow = f => { const g = defaultG(f), c = portionOf(f, g);
+      return `<div class="frow">${`<button class="item" data-my="${esc(f.id)}"><div class="nm"><div>${f.fav ? "★ " : ""}${esc(f.name)}</div><small>${fmt(g)} г · ${fmt(c.kcal)} ккал · Б ${fmt(c.p)} · Ж ${fmt(c.f)} · У ${fmt(c.c)}</small></div></button>`}<button class="qadd" data-q="${esc(f.id)}" aria-label="Добавить ${esc(f.name)} ${fmt(g)} г">${ICON_PLUS}</button></div>`; };
     const draw = st => {
       if (!$("aq")) return; // окно уже закрыли, а ответ базы пришёл позже
       const q = $("aq").value.trim();
-      const mine = (q ? foods : byUse(foods).sort((a, b) => !!b.fav - !!a.fav)).filter(f => !q || match(f, q)).slice(0, q ? 30 : 8);
+      const recRow = (r, i) => `<button class="item" data-rec="${i}"><div class="nm"><div>${esc(r.name)}</div><small>${r.g ? fmt(r.g) + " г · " : ""}Б ${fmt(r.p)} · Ж ${fmt(r.f)} · У ${fmt(r.c)}</small></div><div class="kc">${fmt(r.kcal)}</div><span class="plus">${ICON_PLUS}</span></button>`;
       let h = "";
       if (!q){
+        // без поиска — «Как вчера» сверху и выбранный раздел
         const yItems = (weekDocs[addDays(cur, -1)]?.items || []).filter(x => (MEALS.includes(x.meal) ? x.meal : "Перекус") === meal);
         if (yItems.length) h += `<button class="quick" id="ayest"><span><b>Как вчера</b><small>${esc(yItems.map(x => x.name).join(", "))}</small></span><i>${fmt(yItems.reduce((s, x) => s + num(x.kcal), 0))} ккал</i></button>`;
-        if (combos.length) h += `<div class="cap">Мои блюда</div><div class="list" id="acombos">${combos.map(c => `<div class="swipe"><button class="del" data-cdel="${esc(c.id)}">Удалить</button><button class="item" data-combo="${esc(c.id)}"><div class="nm"><div>${esc(c.name)}</div><small>${esc(c.items.map(x => x.name).join(", "))}</small></div><div class="kc">${fmt(c.items.reduce((s, x) => s + num(x.kcal), 0))}</div><span class="plus">${ICON_PLUS}</span></button></div>`).join("")}</div>`;
+        const sel = sec === "freq" ? frequent() : sec === "fav" ? byUse(foods.filter(f => f.fav)) : sec === "all" ? byUse(foods) : CATS.includes(sec) ? byUse(foods.filter(f => catOf(f) === sec)).sort((a, b) => !!b.fav - !!a.fav) : null;
+        if (sec === "rec") h += rec.length ? `<div class="list">${rec.map(recRow).join("")}</div>` : `<div class="empty">Пока нет недавних</div>`;
+        else if (sec === "combos") h += `<div class="list" id="acombos">${combos.map(c => `<div class="swipe"><button class="del" data-cdel="${esc(c.id)}">Удалить</button><button class="item" data-combo="${esc(c.id)}"><div class="nm"><div>${esc(c.name)}</div><small>${esc(c.items.map(x => x.name).join(", "))}</small></div><div class="kc">${fmt(c.items.reduce((s, x) => s + num(x.kcal), 0))}</div><span class="plus">${ICON_PLUS}</span></button></div>`).join("") || `<div class="empty">Нет сохранённых блюд</div>`}</div>`;
+        else h += sel.length ? `<div class="list">${sel.map(quickRow).join("")}</div>` : `<div class="empty">Здесь пусто</div>`;
       }
-      if (!q && rec.length) h += `<div class="cap">Недавние — нажми, чтобы повторить</div><div class="list">${rec.map((r, i) => `<button class="item" data-rec="${i}"><div class="nm"><div>${esc(r.name)}</div><small>${r.g ? fmt(r.g) + " г · " : ""}Б ${fmt(r.p)} · Ж ${fmt(r.f)} · У ${fmt(r.c)}</small></div><div class="kc">${fmt(r.kcal)}</div><span class="plus">${ICON_PLUS}</span></button>`).join("")}</div>`;
-      if (mine.length) h += `<div class="cap">Мои продукты</div><div class="list">${mine.map(f => foodRow(f, `data-my="${esc(f.id)}"`)).join("")}</div>`;
+      const mine = q ? foods.filter(f => match(f, q)).slice(0, 30) : [];
+      if (mine.length) h += `<div class="cap">Мои продукты</div><div class="list">${mine.map(quickRow).join("")}</div>`;
       if (q.length >= 2) h += `<div class="cap">База Open Food Facts</div>` + (st === "load" ? `<div class="empty">Ищу…</div>`
         : st === "err" ? `<div class="empty">База не ответила. Попробуй ещё раз или введи вручную.</div>`
         : off.length ? `<div class="list">${off.map((f, i) => foodRow(f, `data-off="${i}"`)).join("")}</div>` : `<div class="empty">В базе не нашлось</div>`);
       if (!h) h = `<div class="empty">Начни вводить название или отсканируй штрихкод</div>`;
-      $("ares").innerHTML = h;
+      $("ares").innerHTML = h; drawSecs(); renderCur();
       if ($("acombos")) swipeRows($("acombos"));
     };
     draw();
@@ -373,15 +402,21 @@
       if (q.length >= 2) offTimer = setTimeout(() => offSearch(q).then(r => { off = r; draw(); }, e => { if (e.name !== "AbortError") draw("err"); }), 450);
     };
     $("ares").onclick = e => {
-      if (e.target.closest("#ayest")){ closeSheet(); return addMany((weekDocs[addDays(cur, -1)]?.items || []).filter(x => (MEALS.includes(x.meal) ? x.meal : "Перекус") === meal), meal, "Как вчера"); }
+      const qa = e.target.closest("[data-q]");
+      if (qa){
+        const f = foods.find(x => x.id === qa.dataset.q), g = defaultG(f);
+        addItem({id: newId("m"), name: foodName(f), meal, time: nowTime(), g, ...portionOf(f, g), food: f.id});
+        qa.classList.add("done"); setTimeout(() => qa.classList.remove("done"), 700);
+        return;
+      }
+      if (e.target.closest("#ayest")){ return addMany((weekDocs[addDays(cur, -1)]?.items || []).filter(x => (MEALS.includes(x.meal) ? x.meal : "Перекус") === meal), meal, "Как вчера"); }
       const cd = e.target.closest("[data-cdel]");
       if (cd){ const c = combos.find(x => x.id === cd.dataset.cdel); combos = combos.filter(x => x.id !== cd.dataset.cdel); saveConf("combos.json", combos, "удалено блюдо: " + (c?.name || "")); return draw(); }
       const row = e.target.closest(".swipe.open"); if (row) return row.classList.remove("open");
       const cb = e.target.closest("[data-combo]");
-      if (cb){ const c = combos.find(x => x.id === cb.dataset.combo); closeSheet(); return addMany(c.items, meal, c.name); }
+      if (cb){ const c = combos.find(x => x.id === cb.dataset.combo); return addMany(c.items, meal, c.name); }
       const b = e.target.closest("[data-my],[data-off],[data-rec]"); if (!b) return;
       if (b.dataset.rec){
-        closeSheet();
         return addItem({...rec[Number(b.dataset.rec)], id: newId("m"), meal, time: nowTime()}, "повтор: " + rec[Number(b.dataset.rec)].name);
       }
       if (b.dataset.my) portionSheet(foods.find(f => f.id === b.dataset.my), meal, false);
@@ -398,7 +433,7 @@
     openSheet(`<h2>${esc(food.name)}</h2>
       <div class="hint">${food.brand ? esc(food.brand) + " · " : ""}на 100 г: ${per100(food)}</div>
       ${pick ? `<div class="cap">Приём пищи · ${esc(dayName)}</div><div class="chips seg" id="pmeal">${MEALS.map(m => `<button class="chip${m === meal ? " on" : ""}" data-m="${m}">${m}</button>`).join("")}</div>` : ""}
-      <label class="fld"><span>Сколько, г</span><input id="pg" inputmode="decimal" value="${food.pc || 100}"></label>
+      <label class="fld"><span>Сколько, г</span><input id="pg" inputmode="decimal" value="${food.id ? defaultG(food) : food.pc || 100}"></label>
       ${food.pc ? `<div class="chips">${[1,2,3].map(n => `<button class="chip" data-n="${n}">${n} шт</button>`).join("")}</div>` : ""}
       <div class="res" id="pres"></div>
       ${fromBase ? `<label class="chk"><input type="checkbox" id="psave" checked> Сохранить в мои продукты</label>
@@ -500,26 +535,28 @@
     };
   }
 
-  function mealSheet(m){
+  // нажатие на приём пищи и «+» открывают одно окно (раньше было два шага)
+  function mealSheet(m){ addSheet(m); }
+
+  // что уже съедено в этом приёме — сверху окна; обновляется само после любой правки
+  let curAddMeal = null;
+  function renderCur(){
+    const box = $("acur"); if (!box || !curAddMeal) return;
+    const m = curAddMeal;
     const list = (day.items || []).filter(it => (MEALS.includes(it.meal) ? it.meal : "Перекус") === m).sort((a,b) => String(a.time||"").localeCompare(String(b.time||"")));
-    openSheet(`<h2>${m}</h2>
-      <div id="mlist">${list.length ? list.map(it => `<div class="swipe"><button class="del" data-del="${esc(it.id)}">Удалить</button><button class="item" data-id="${esc(it.id)}"><div class="nm"><div>${esc(it.name || "Без названия")}</div><small>${it.g?fmt(it.g)+" г · ":""}Б ${fmt(it.p)} · Ж ${fmt(it.f)} · У ${fmt(it.c)}${it.time?" · "+esc(it.time):""}</small></div><div class="kc">${fmt(it.kcal)}</div></button></div>`).join("") : `<div class="empty">Пока пусто</div>`}</div>
-      <div class="hint">Смахни блюдо влево, чтобы удалить</div>
-      <button class="btn" id="madd">Добавить</button>
-      ${list.length > 1 ? `<button class="btn ghost" id="mcombo">Сохранить как моё блюдо</button>` : ""}`);
+    if (!list.length){ box.innerHTML = ""; return; }
+    box.innerHTML = `<div class="cap row">Уже в ${esc(m.toLowerCase())}е<span>${fmt(list.reduce((s, x) => s + num(x.kcal), 0))} ккал</span></div>
+      <div class="list cur" id="mlist">${list.map(it => `<div class="swipe"><button class="del" data-del="${esc(it.id)}">Удалить</button><button class="item" data-id="${esc(it.id)}"><div class="nm"><div>${esc(it.name || "Без названия")}</div><small>${it.g?fmt(it.g)+" г · ":""}Б ${fmt(it.p)} · Ж ${fmt(it.f)} · У ${fmt(it.c)}</small></div><div class="kc">${fmt(it.kcal)}</div></button></div>`).join("")}</div>
+      ${list.length > 1 ? `<button class="linkbtn" id="mcombo">Сохранить как моё блюдо</button>` : ""}`;
     if ($("mcombo")) $("mcombo").onclick = () => comboSheet(list, m);
     $("mlist").onclick = e => {
       const del = e.target.closest("[data-del]");
-      if (del){
-        removeItem(day.items.find(x => x.id === del.dataset.del));
-        return mealSheet(m);
-      }
+      if (del) return removeItem(day.items.find(x => x.id === del.dataset.del));
       const row = e.target.closest(".swipe");
       if (row?.classList.contains("open")) return row.classList.remove("open"); // тап по открытой строке — закрыть
       const b = e.target.closest(".item"); if (b) itemDetails(b.dataset.id);
     };
     swipeRows($("mlist"));
-    $("madd").onclick = () => addSheet(m);
   }
 
   // ---------- всплывающая плашка с действием (как в iOS: «Удалено · Отменить») ----------
@@ -527,6 +564,7 @@
   function toast(text, action, fn){
     const t = $("toast");
     t.innerHTML = `<span>${esc(text)}</span>${action ? `<button>${esc(action)}</button>` : ""}`;
+    t.classList.toggle("top", $("sheet").classList.contains("on"));
     t.classList.add("on");
     if (action) t.querySelector("button").onclick = () => { t.classList.remove("on"); fn(); };
     clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("on"), 4000);
@@ -535,6 +573,25 @@
     if (!it) return;
     mutate({t: "del", id: it.id}, "удалено: " + it.name);
     toast(`Удалено: ${it.name}`, "Отменить", () => mutate({t: "put", item: it}, "возвращено: " + it.name));
+  }
+
+  // лента чипов: своя горизонтальная прокрутка — упирается в края без «резинки», вертикальный жест уходит странице;
+  // мышью (компьютер, превью) — тянуть и крутить колёсиком; после перетаскивания клик по чипу не срабатывает
+  function hscroll(el){
+    let x0 = null, y0 = 0, s0 = 0, horiz = null, mx = null, ms = 0, dragged = false;
+    el.addEventListener("touchstart", e => { x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; s0 = el.scrollLeft; horiz = null; }, {passive: true});
+    el.addEventListener("touchmove", e => {
+      if (x0 === null) return;
+      const dx = e.touches[0].clientX - x0, dy = e.touches[0].clientY - y0;
+      if (horiz === null && Math.abs(dx) + Math.abs(dy) > 6) horiz = Math.abs(dx) > Math.abs(dy);
+      if (horiz) el.scrollLeft = s0 - dx; // браузер сам ограничит 0…max
+    }, {passive: true});
+    el.addEventListener("touchend", () => { x0 = null; }, {passive: true});
+    el.addEventListener("pointerdown", e => { if (e.pointerType !== "mouse") return; mx = e.clientX; ms = el.scrollLeft; dragged = false; el.setPointerCapture(e.pointerId); });
+    el.addEventListener("pointermove", e => { if (mx === null) return; const dx = e.clientX - mx; if (Math.abs(dx) > 4) dragged = true; el.scrollLeft = ms - dx; });
+    el.addEventListener("pointerup", () => { mx = null; });
+    el.addEventListener("click", e => { if (dragged){ e.stopImmediatePropagation(); e.preventDefault(); dragged = false; } }, true);
+    el.addEventListener("wheel", e => { const d = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY; if (!d) return; el.scrollLeft += d; e.preventDefault(); }, {passive: false});
   }
 
   // смахивание строк влево открывает кнопку «Удалить»
@@ -558,6 +615,26 @@
       if (horiz){ row.classList.toggle("open", dx < -48); row.querySelector(".item").style.transform = ""; row.classList.remove("drag"); }
       row = null;
     });
+    // мышь (компьютер, превью): зажать строку и потянуть влево; после перетаскивания клик не открывает блюдо
+    let mrow = null, mx0 = 0, mdx = 0, mdrag = false;
+    root.addEventListener("pointerdown", e => {
+      if (e.pointerType !== "mouse" || e.target.closest(".del")) return;
+      mrow = e.target.closest(".swipe"); if (!mrow) return;
+      root.querySelectorAll(".swipe.open").forEach(r => r !== mrow && r.classList.remove("open"));
+      mx0 = e.clientX; mdx = 0; mdrag = false; root.setPointerCapture(e.pointerId);
+    });
+    root.addEventListener("pointermove", e => {
+      if (!mrow) return;
+      const m = e.clientX - mx0; if (Math.abs(m) > 6) mdrag = true; if (!mdrag) return;
+      mdx = Math.max(-96, Math.min(0, m + (mrow.classList.contains("open") ? -96 : 0)));
+      mrow.querySelector(".item").style.transform = `translateX(${mdx}px)`; mrow.classList.add("drag");
+    });
+    root.addEventListener("pointerup", () => {
+      if (!mrow) return;
+      if (mdrag){ mrow.classList.toggle("open", mdx < -48); mrow.querySelector(".item").style.transform = ""; mrow.classList.remove("drag"); }
+      mrow = null;
+    });
+    root.addEventListener("click", e => { if (mdrag && !e.target.closest(".del")){ e.stopImmediatePropagation(); mdrag = false; } }, true);
   }
 
   function renderSups(){
@@ -679,10 +756,10 @@
 
   // ---------- sheets ----------
   function openSheet(html){ stopScan?.(); const sb = $("sheetBody"); sb.innerHTML = html; sb.classList.remove("swap"); sb.offsetWidth; sb.classList.add("swap"); $("scrim").classList.add("on"); $("sheet").classList.add("on"); }
-  function closeSheet(){ stopScan?.(); $("scrim").classList.remove("on"); $("sheet").classList.remove("on"); $("sheet").style.transform = ""; }
+  function closeSheet(){ curAddMeal = null; stopScan?.(); $("scrim").classList.remove("on"); $("sheet").classList.remove("on"); $("sheet").style.transform = ""; }
   (() => {
     const sh = $("sheet"); let y0 = null, dy = 0;
-    sh.addEventListener("touchstart", e => { y0 = sh.scrollTop <= 0 && !e.target.closest(".swipe") ? e.touches[0].clientY : null; dy = 0; }, {passive: true});
+    sh.addEventListener("touchstart", e => { y0 = sh.scrollTop <= 0 && !e.target.closest(".swipe,.chips") ? e.touches[0].clientY : null; dy = 0; }, {passive: true});
     sh.addEventListener("touchmove", e => {
       if (y0 === null) return;
       dy = e.touches[0].clientY - y0;
@@ -868,17 +945,7 @@
   $("wMinus").onclick = () => bumpWater(-((waterLog[cur] || []).pop() || 250)); // убрать последнюю порцию, иначе 250
   $("newFood").onclick = () => foodForm(null);
   $("foodQ").oninput = renderFoods;
-  // лента категорий: своя горизонтальная прокрутка — упирается в края без «резинки», вертикальный жест уходит странице
-  (() => { const el = $("foodCats"); let x0 = null, y0 = 0, s0 = 0, horiz = null;
-    el.addEventListener("touchstart", e => { x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; s0 = el.scrollLeft; horiz = null; }, {passive: true});
-    el.addEventListener("touchmove", e => {
-      if (x0 === null) return;
-      const dx = e.touches[0].clientX - x0, dy = e.touches[0].clientY - y0;
-      if (horiz === null && Math.abs(dx) + Math.abs(dy) > 6) horiz = Math.abs(dx) > Math.abs(dy);
-      if (horiz) el.scrollLeft = s0 - dx; // браузер сам ограничит 0…max
-    }, {passive: true});
-    el.addEventListener("touchend", () => { x0 = null; }, {passive: true});
-  })();
+  hscroll($("foodCats"));
   $("foodCats").onclick = e => { const b = e.target.closest("[data-cat]"); if (b){ foodCat = b.dataset.cat; renderFoods(); } };
   $("scanBtn").onclick = () => scanSheet();
   $("foodList").onclick = e => {
