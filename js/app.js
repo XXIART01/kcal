@@ -1,6 +1,6 @@
 (() => {
   // ---------- constants ----------
-  const VERSION = 65;
+  const VERSION = 66;
   // iOS отдаёт выбранный в настройках размер текста через системный шрифт -apple-system-body (17 px по умолчанию):
   // масштабируем интерфейс тем же коэффициентом, но не больше 1,3 — иначе главный экран перестанет помещаться
   (() => { const p = document.createElement("span"); p.style.font = "-apple-system-body"; p.style.position = "absolute"; p.style.visibility = "hidden"; p.textContent = "a";
@@ -589,7 +589,7 @@
   // бытовые меры — когда у продукта нет своего веса штуки или он про другое: «тарелка борща», «ложка сметаны»
   const MEASURES = [[/^тарел/, 300, "тарелка"], [/^миск/, 300, "миска"], [/^стакан/, 250, "стакан"], [/^кружк/, 300, "кружка"], [/^чашк/, 200, "чашка"],
     [/^чл$/, 5, "ч. ложка"], [/^ложк|^ложек/, 15, "ложка"], [/^горст/, 30, "горсть"], [/^ломт/, 20, "ломтик"]];
-  const SAY_FILL = new Set("я мы съел съела съели поел поела ел ела выпил выпила попил попила запиши записать добавь добавить внеси внести занеси сегодня вчера позавчера утром днем вечером ночью на в во с со а также ну там вот это мне пожалуйста почти немного из по к за у был была было как около примерно уже отдельно тоже ещё".split(" "));
+  const SAY_FILL = new Set("я мы съел съела съели поел поела ел ела выпил выпила попил попила запиши записать добавь добавить внеси внести занеси сегодня вчера позавчера утром днем вечером ночью на в во с со а также ну там вот это мне пожалуйста почти немного из по к за у был была было как около примерно уже отдельно тоже ещё прием приема пищи пища посмотри смотри вес веса весом сколько поштучно штучно нее него них нас наш нашей чистой чистый чистого чистую этот эта этой этого этих этом так такой который которая которое называется называют сверху сначала его ее но лежала лежал лежали".split(" "));
   const SAY_SYN = {яиц:"яйца", яйцо:"яйца"};
   const SAY_MEALS = [[/^завтрак/, "Завтрак"], [/^обед/, "Обед"], [/^ужин/, "Ужин"], [/^перекус/, "Перекус"]];
   // глагол в начале куска фразы: добавить (по умолчанию) / удалить / поправить граммы / перенести в другой приём
@@ -829,7 +829,10 @@
   }
   const sayKnown = w => [...foods, ...DISHES].some(f => foodWords(f).some(x => stemEq(w, x)));
   function sayParse(text){
-    let tx = sayNorm(text).replace(/чайн[а-я]* ложк[а-я]*/g, "чл").replace(/столов[а-я]* ложк/g, "ложк");
+    let tx = sayNorm(text).replace(/чайн[а-я]* ложк[а-я]*/g, "чл").replace(/столов[а-я]* ложк/g, "ложк")
+      .replace(/картош[а-я]*\s+(?:с\s+|со\s+)?шарик[а-я]*/g, "картошарики") // диктовка слышит «картошка с шариками»
+      // «но в этой картошке так лежала сосиска», «в ней была» — дальше то, что внутри предыдущего
+      .replace(/(?:^|\s)(?:но\s+|а\s+)?в\s+(?:этой|этом|этих|ней|нем|них)(?:\s+(?!так\s|там\s|лежал|был)[а-я]+)?\s+(?:так\s+|там\s+|еще\s+)?(?:лежал|был)[а-я]*(?=\s)/g, " , § ");
     // «как вчера на завтрак» — скопировать приём из другого дня (вырезаем, чтобы «вчера» не стало датой записи)
     let copy = null; const cm = tx.match(COPY_RE), cm2 = !cm && tx.match(COPY2_RE);
     if (cm){ const d = cm[1]; copy = {ref: d === "вчера" ? -1 : d === "позавчера" ? -2 : "w" + WD[d.replace(/^в\s+/, "")], meal: cm[2] ? SAY_MEALS.find(([re]) => re.test(cm[2]))[1] : null}; tx = tx.replace(cm[0], " , "); }
@@ -839,13 +842,14 @@
     // «из них», «в том числе», «включая»… — следующий кусок фразы лежит внутри предыдущего (помечаем знаком §)
     const clauses = tx.replace(/(^|[\s,;])(из них|в том числе|включая|в них была|в них были|в них было|в них был|в них|в нем была|в нем были|в нем было|в нем был|в нем|в ней была|в ней были|в ней было|в ней был|в ней|там была|там были|там было|там был|среди них была|среди них были|из которых|из этого|вычти|вычесть|минус|не считая)(?=\s)/g, "$1, § ").split(/[,;\n!?]+|\.(?!\d)|\s(?:и|плюс|еще|потом|затем)\s/);
     const rows = [], miss = [], edits = []; let stick = null, lastMain = null, firstMeal = null, act = "add";
+    // «вычти из 343 …» — число после «из» про основное блюдо, а не вес нового
     for (const cl of clauses){
       const toks = cl.match(/§|\d+(?:\.\d+)?%?|[a-zа-я]+/g) || [], els = []; let clMeal = null, clFrom = null, inner = false;
       for (let i = 0; i < toks.length; i++){
         const t = toks[i];
         if (t === "§"){ inner = true; continue; }
         if (SAY_VERB.test(t)){ act = verbOf(t); continue; } // глагол действует и на следующие куски: «убери банан и творог»
-        if (/^\d/.test(t)){ if (!t.endsWith("%")) els.push({n: parseFloat(t)}); continue; } // «0,3%» — часть названия
+        if (/^\d/.test(t)){ if (!t.endsWith("%") && toks[i - 1] !== "из") els.push({n: parseFloat(t)}); continue; } // «0,3%» — часть названия
         if (NUMW.hasOwnProperty(t)){ let v = 0; while (i < toks.length && NUMW.hasOwnProperty(toks[i])) v += NUMW[toks[i++]]; i--; els.push({n: v}); continue; }
         // «полпачки», «полсамсы» — половина
         if (/^пол[а-я]{3,}/.test(t)){ const rest = t.slice(3); if (U_PC.test(rest) || U_G.hasOwnProperty(rest) || sayKnown(rest)){ els.push({n: 0.5}, {w: rest}); continue; } }
@@ -875,7 +879,8 @@
         for (const x of items){ if (x.q){ if (run.length){ pairs.push([run, x.q]); run = []; } } else run.push(x.w); }
         if (run.length) pairs.push([run, null]);
       }
-      for (const [words, q] of pairs){
+      for (let [words, q] of pairs){
+        if (inner && !q) q = {n: 1, u: "pc", k: 1, mw: null};
         if (act !== "add"){ edits.push({act, words, q, from: clFrom || (act === "move" ? null : clMeal), to: act === "move" ? clMeal : null}); continue; }
         const cands = sayCands(words);
         if (!cands.length){ miss.push(words.join(" ")); continue; }
@@ -907,7 +912,7 @@
     const copyDate = ref => { if (typeof ref === "number") return addDays(todayIso(), ref);
       const wd = +ref.slice(1); for (let i = 1; i <= 7; i++){ const d = addDays(todayIso(), -i); if (parseIso(d).getDay() === wd) return d; } };
     openSheet(`<h2>Что съел?</h2>
-      <div class="hint">Напиши или надиктуй (микрофон на клавиатуре). Например: «картошарики 150 г, два куска хлеба фитнес», «343 г картошариков, из них одна сосиска», «тарелка борща», «как вчера на завтрак». Исправить: «поправь творог на 200», «убери банан из перекуса», «перенеси творог в ужин».</div>
+      <div class="hint">Продукт и вес: «на завтрак картошарики 343 г, в них сосиска, соус бургер 28 г». Исправить: «поправь творог на 200», «убери банан».</div>
       <textarea class="say" id="sayT" rows="3" placeholder="Что и сколько съел…" aria-label="Что съел" autocomplete="off"></textarea>
       <div class="sayday" id="sayDay"></div>
       <div class="cap">Приём пищи</div>
@@ -954,6 +959,7 @@
         <small class="snote" hidden></small></div>`).join("")
         + (parsed.miss.length ? `<div class="hint warnline">Не нашёл ни в каталоге, ни в справочнике: ${esc(parsed.miss.join(", "))}. Добавь через «+» у приёма пищи.</div>` : "");
       parsed.rows.forEach((_, i) => upd(i)); total();
+      grow(); // список мог сузить окно (полоса прокрутки) — подогнать высоту поля заново
     };
     // строки из записей другого дня («как вчера на завтрак»): тот же продукт и вес
     const fromItem = (it, m) => {
@@ -1000,7 +1006,11 @@
       if (my !== seq) return; // пока ждали другой день, фразу уже поменяли
       parsed = p; draw();
     };
-    $("sayT").oninput = () => { clearTimeout(tm); tm = setTimeout(rebuild, 200); };
+    const grow = () => { const t = $("sayT"), max = innerHeight * 0.4; t.style.height = "auto";
+      // подгоняем, пока текст не влезет: с увеличенным шрифтом iOS (zoom) одного замера мало
+      for (let i = 0; i < 4 && t.scrollHeight > t.clientHeight && t.offsetHeight < max; i++) t.style.height = Math.min(t.offsetHeight + t.scrollHeight - t.clientHeight + 2, max) + "px";
+      t.style.overflowY = t.scrollHeight > t.clientHeight ? "auto" : "hidden"; };
+    $("sayT").oninput = () => { grow(); clearTimeout(tm); tm = setTimeout(rebuild, 200); };
     $("sayMeal").onclick = e => { const b = e.target.closest("[data-m]"); if (!b) return; meal = b.dataset.m; paintMeal();
       parsed.rows.forEach((r, i) => { r.meal = null; upd(i); }); }; // выбранный вручную приём важнее сказанного
     const rowOf = e => { const el = e.target.closest("[data-i]"); return el ? [parsed.rows[+el.dataset.i], +el.dataset.i, el] : []; };
