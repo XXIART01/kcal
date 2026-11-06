@@ -1,6 +1,6 @@
 (() => {
   // ---------- constants ----------
-  const VERSION = 72;
+  const VERSION = 73;
   // iOS отдаёт выбранный в настройках размер текста через системный шрифт -apple-system-body (17 px по умолчанию):
   // масштабируем интерфейс тем же коэффициентом, но не больше 1,3 — иначе главный экран перестанет помещаться
   (() => { const p = document.createElement("span"); p.style.font = "-apple-system-body"; p.style.position = "absolute"; p.style.visibility = "hidden"; p.textContent = "a";
@@ -922,7 +922,17 @@
       <div class="chips seg" id="sayMeal">${MEALS.map(m => `<button class="chip${m === meal ? " on" : ""}" data-m="${m}">${m}</button>`).join("")}</div>
       <div id="sayRows"></div>
       <div class="sayfoot"><button class="btn" id="sayAdd" disabled>Добавить</button></div>`);
+    // окно сразу высокое: поле фразы наверху и не уходит под клавиатуру (клавиатура нужна — на ней кнопка диктовки)
+    $("sheet").classList.add("tall", "say-open");
     try { $("sayT").focus({preventScroll: true}); } catch {} // в том же нажатии — тогда iOS сразу открывает клавиатуру
+    // клавиатура открыта — окно встаёт ровно над ней: видно и поле, и кнопку «Добавить»
+    const vv = window.visualViewport, sh = $("sheet");
+    const fit = () => {
+      if (!sh.classList.contains("say-open") || !sh.classList.contains("on")){ vv?.removeEventListener("resize", fit); vv?.removeEventListener("scroll", fit); sh.style.bottom = sh.style.height = ""; sh.classList.remove("say-open"); return; }
+      const kb = vv ? Math.max(0, innerHeight - vv.height - vv.offsetTop) : 0;
+      sh.style.bottom = kb > 80 ? kb + "px" : ""; sh.style.height = kb > 80 ? (vv.height - 10) + "px" : "";
+    };
+    vv?.addEventListener("resize", fit); vv?.addEventListener("scroll", fit);
     // в чём вводить: штуки — если у продукта есть вес штуки и так было сказано или выбрано; у блюда «всего − вложенное» — граммы
     const unitOf = r => { const f = r.cands[r.fi].f; return !f.pc || r.kids?.length ? "g" : r.unit || (r.pcs ? "pc" : "g"); };
     const valOf = r => unitOf(r) === "pc" ? r1(r.g / r.cands[r.fi].f.pc) : r1(r.g);
@@ -1703,7 +1713,7 @@
   function openSheet(html){
     stopScan?.(); const sh = $("sheet"), wasOpen = sh.classList.contains("on");
     if (!wasOpen) sheetOpener = document.activeElement;
-    sh.classList.remove("tall"); const sb = $("sheetBody"); sb.innerHTML = html; sb.classList.remove("swap"); sb.offsetWidth; sb.classList.add("swap");
+    sh.classList.remove("tall", "say-open"); sh.style.bottom = sh.style.height = ""; const sb = $("sheetBody"); sb.innerHTML = html; sb.classList.remove("swap"); sb.offsetWidth; sb.classList.add("swap");
     const h = sb.querySelector("h2"); if (h){ h.id = "sheetTitle"; h.tabIndex = -1; }
     $("scrim").classList.add("on"); sh.classList.add("on");
     $("scroller").inert = true; $("tabbar").inert = true; // VoiceOver и Tab не уходят под окно
@@ -1711,6 +1721,7 @@
     setTimeout(() => { const t = $("sheetTitle"); if (t && !sb.contains(document.activeElement)) t.focus({preventScroll: true}); }, 320);
   }
   function closeSheet(){
+    const sh0 = $("sheet"); if (sh0.classList.contains("say-open")){ sh0.classList.remove("say-open"); sh0.style.bottom = sh0.style.height = ""; }
     curAddMeal = null; stopScan?.(); $("scrim").classList.remove("on"); $("sheet").classList.remove("on"); $("sheet").style.transform = "";
     $("scroller").inert = false; $("tabbar").inert = false;
     if (sheetOpener?.isConnected) sheetOpener.focus({preventScroll: true}); sheetOpener = null;

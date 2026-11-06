@@ -934,3 +934,7 @@ section:not([hidden])>*{animation:rise .55s var(--ease-ios) both}
 .snote{font-size:11.5px;margin-top:3px}
 .sgroup{margin:10px 0 0;padding-top:8px}
 .sgroup b{font-size:14px}
+/* высокое окно «Что съел?»: кнопка внизу даже при пустом списке */
+.sheet.say-open{display:flex;flex-direction:column}
+.sheet.say-open #sheetBody{flex:1 0 auto;display:flex;flex-direction:column}
+.sheet.say-open #sayRows{flex:1 0 auto}
