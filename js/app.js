@@ -1,6 +1,6 @@
 (() => {
   // ---------- constants ----------
-  const VERSION = 68;
+  const VERSION = 69;
   // iOS отдаёт выбранный в настройках размер текста через системный шрифт -apple-system-body (17 px по умолчанию):
   // масштабируем интерфейс тем же коэффициентом, но не больше 1,3 — иначе главный экран перестанет помещаться
   (() => { const p = document.createElement("span"); p.style.font = "-apple-system-body"; p.style.position = "absolute"; p.style.visibility = "hidden"; p.textContent = "a";
@@ -914,7 +914,7 @@
     const copyDate = ref => { if (typeof ref === "number") return addDays(todayIso(), ref);
       const wd = +ref.slice(1); for (let i = 1; i <= 7; i++){ const d = addDays(todayIso(), -i); if (parseIso(d).getDay() === wd) return d; } };
     openSheet(`<h2>Что съел?</h2>
-      <div class="hint">Продукт и вес: «на завтрак картошарики 343 г, в них сосиска, соус бургер 28 г». Исправить: «поправь творог на 200», «убери банан».</div>
+      <div class="hint">Скажи, что и сколько: «на обед гречка 200 г, две котлеты и чай». Исправить: «поправь гречку на 150», «убери чай».</div>
       <textarea class="say" id="sayT" rows="3" placeholder="Что и сколько съел…" aria-label="Что съел" autocomplete="off"></textarea>
       <div class="sayday" id="sayDay"></div>
       <div class="cap">Приём пищи</div>
