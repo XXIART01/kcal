@@ -1,6 +1,6 @@
 (() => {
   // ---------- constants ----------
-  const VERSION = 66;
+  const VERSION = 68;
   // iOS отдаёт выбранный в настройках размер текста через системный шрифт -apple-system-body (17 px по умолчанию):
   // масштабируем интерфейс тем же коэффициентом, но не больше 1,3 — иначе главный экран перестанет помещаться
   (() => { const p = document.createElement("span"); p.style.font = "-apple-system-body"; p.style.position = "absolute"; p.style.visibility = "hidden"; p.textContent = "a";
@@ -827,6 +827,7 @@
       p.g = Math.max(0, r1(p.base - p.sub)); p.pcs = null; p.mlab = null;
     }
   }
+  const sayAll = () => [...foods, ...DISHES];
   const sayKnown = w => [...foods, ...DISHES].some(f => foodWords(f).some(x => stemEq(w, x)));
   function sayParse(text){
     let tx = sayNorm(text).replace(/чайн[а-я]* ложк[а-я]*/g, "чл").replace(/столов[а-я]* ложк/g, "ложк")
@@ -903,6 +904,7 @@
 
   function saySheet(){
     let meal = guessMeal(), parsed = {rows: [], miss: [], edits: []}, tm, seq = 0;
+    const picked = {}; // слова фразы → продукт, выбранный вручную в этом окне
     // куда писать: «вчера» / «позавчера» во фразе — от настоящего сегодня, иначе открытый день
     const targetOf = p => p.dayOff == null ? cur : addDays(todayIso(), p.dayOff), target = () => targetOf(parsed);
     const dayLabel = d => d === todayIso() ? "сегодня" : d === addDays(todayIso(), -1) ? "вчера, " + ruDate(d) : ruDate(d);
@@ -920,6 +922,10 @@
       <div id="sayRows"></div>
       <div class="sayfoot"><button class="btn" id="sayAdd" disabled>Добавить</button></div>`);
     try { $("sayT").focus({preventScroll: true}); } catch {} // в том же нажатии — тогда iOS сразу открывает клавиатуру
+    // в чём вводить: штуки — если у продукта есть вес штуки и так было сказано или выбрано; у блюда «всего − вложенное» — граммы
+    const unitOf = r => { const f = r.cands[r.fi].f; return !f.pc || r.kids?.length ? "g" : r.unit || (r.pcs ? "pc" : "g"); };
+    const valOf = r => unitOf(r) === "pc" ? r1(r.g / r.cands[r.fi].f.pc) : r1(r.g);
+    const unitShort = n => ({штука: "шт", упаковка: "упак", порция: "порц", бутылка: "бут", пакетик: "пак", тарелка: "тар"}[n] || n);
     const X = `<svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>`;
     const live = () => parsed.rows.filter(r => r.on !== false && r.g > 0);
     const plan = () => (parsed.plan || []).filter(x => !x.miss);
@@ -931,12 +937,18 @@
     const upd = i => {
       const r = parsed.rows[i], el = $("sayRows").querySelector(`[data-i="${i}"]`); if (!el) return;
       const f = r.cands[r.fi].f, c = portionOf(f, r.g);
+      el.querySelector(".sname span").textContent = foodName(f) + (f.ref ? " · ≈" : "");
+      const u = unitOf(r), su = el.querySelector(".sunit");
+      su.innerHTML = f.pc && !r.kids?.length
+        ? `<button data-u="g" class="${u === "g" ? "on" : ""}" aria-pressed="${u === "g"}">г</button><button data-u="pc" class="${u === "pc" ? "on" : ""}" aria-pressed="${u === "pc"}">${esc(unitShort(pcLabel(f)))}</button>`
+        : `<span class="su">г</span>`;
+      el.querySelector(".sg").setAttribute("aria-label", u === "pc" ? `Сколько, ${pcLabel(f)}` : "Сколько граммов");
       el.querySelector(".sres").textContent = `${fmt(c.kcal)} ккал · Б ${fmt(c.p, 1)} · Ж ${fmt(c.f, 1)} · У ${fmt(c.c, 1)}`;
       const n = el.querySelector(".snote");
       const kids = (r.kids || []).filter(k => k.on !== false);
       n.textContent = [r.meal && r.meal !== meal ? "→ " + r.meal.toLowerCase() : "",
         kids.length ? `${fmt(r.base)} г всего − ${kids.map(k => `${k.cands[k.fi].f.name.split(" ")[0].toLowerCase()} ${fmt(k.g)} г`).join(", ")}` : "",
-        r.pcs ? `${fmt(r.pcs, 1)} × ${pcLabel(f)} ${fmt(f.pc)} г` : "",
+        r.pcs ? `${fmt(r.pcs, 1)} × ${pcLabel(f)} ${fmt(f.pc)} г = ${fmt(r.g)} г` : "",
         r.mlab ? `${fmt(r.mn, 1)} × ${r.mlab} ≈ ${fmt(r.g)} г` : "",
         f.ref ? "≈ справочные КБЖУ, не из каталога" : "",
         r.est ? (r.q ? "Вес порции у продукта не указан — поставил обычную, проверь граммы" : "Количество не названо — поставил обычную порцию, проверь граммы") : ""].filter(Boolean).join(" · ");
@@ -946,7 +958,7 @@
     // после правки одной строки пересчитать связанные («всего − вложенное») и обновить цифры
     const sync = () => { saySettle(parsed.rows);
       $("sayRows").querySelectorAll("[data-i]").forEach(el => { const i = +el.dataset.i, inp = el.querySelector(".sg");
-        if (inp !== document.activeElement) inp.value = r1(parsed.rows[i].g); upd(i); }); total(); };
+        if (inp !== document.activeElement) inp.value = valOf(parsed.rows[i]); upd(i); }); total(); };
     const draw = () => {
       const d = target(); $("sayDay").textContent = "Запишу в: " + dayLabel(d); $("sayDay").classList.toggle("other", d !== cur);
       const ms = new Set(parsed.rows.map(r => r.meal)); // во всей фразе один приём («на ужин …») — выбираем его
@@ -954,8 +966,9 @@
       $("sayRows").innerHTML = (parsed.plan || []).map(x => x.miss ? `<div class="hint warnline">${esc(x.miss)}</div>` : `<div class="erow">${esc(x.text)}</div>`).join("")
         + (parsed.copyNote ? `<div class="hint ${parsed.copyEmpty ? "warnline" : ""}">${esc(parsed.copyNote)}</div>` : "")
         + parsed.rows.map((r, i) => `<div class="srow" data-i="${i}">
-        <select class="sname" aria-label="Продукт">${r.cands.map((c, j) => `<option value="${j}"${j === r.fi ? " selected" : ""}>${esc(foodName(c.f))}${c.f.ref ? " · ≈" : ""}</option>`).join("")}</select>
-        <div class="sline"><input class="sg" inputmode="decimal" value="${r1(r.g)}" aria-label="Граммы"><span class="su">г</span><span class="sres"></span><button class="sx" data-x="${i}" aria-label="Убрать">${X}</button></div>
+        <button class="sname" data-pick="${i}" aria-expanded="false" aria-label="Заменить продукт"><span></span><svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
+        <div class="spick" hidden><input class="search spq" type="search" placeholder="Найти в моих продуктах и блюдах" aria-label="Найти продукт для замены" autocomplete="off"><div class="splist"></div></div>
+        <div class="sline"><input class="sg" inputmode="decimal" value="${valOf(r)}" aria-label="Сколько"><div class="sunit"></div><span class="sres"></span><button class="sx" data-x="${i}" aria-label="Убрать">${X}</button></div>
         <small class="snote" hidden></small></div>`).join("")
         + (parsed.miss.length ? `<div class="hint warnline">Не нашёл ни в каталоге, ни в справочнике: ${esc(parsed.miss.join(", "))}. Добавь через «+» у приёма пищи.</div>` : "");
       parsed.rows.forEach((_, i) => upd(i)); total();
@@ -1004,6 +1017,11 @@
       }
       if (p.edits.length) p.plan = await planEdits(p);
       if (my !== seq) return; // пока ждали другой день, фразу уже поменяли
+      // выбранное вручную в этом окне не сбрасывается, когда дописываешь фразу
+      p.rows.forEach(r => { const f = picked[r.key] && sayAll().find(x => x.id === picked[r.key]); if (!f) return;
+        let j = r.cands.findIndex(c => c.f === f); if (j < 0){ r.cands.unshift({f, m: 1}); j = 0; }
+        r.fi = j; if (r.q){ sayGrams(r); r.base = r.g; } });
+      saySettle(p.rows);
       parsed = p; draw();
     };
     const grow = () => { const t = $("sayT"), max = innerHeight * 0.4; t.style.height = "auto";
@@ -1014,14 +1032,44 @@
     $("sayMeal").onclick = e => { const b = e.target.closest("[data-m]"); if (!b) return; meal = b.dataset.m; paintMeal();
       parsed.rows.forEach((r, i) => { r.meal = null; upd(i); }); }; // выбранный вручную приём важнее сказанного
     const rowOf = e => { const el = e.target.closest("[data-i]"); return el ? [parsed.rows[+el.dataset.i], +el.dataset.i, el] : []; };
-    $("sayRows").onchange = e => { const [r] = rowOf(e); if (!r || !e.target.classList.contains("sname")) return;
-      r.fi = +e.target.value; if (r.q){ sayGrams(r); r.base = r.g; } sync(); };
-    $("sayRows").oninput = e => { const [r] = rowOf(e); if (!r || !e.target.classList.contains("sg")) return;
-      r.g = num(String(e.target.value).replace(",", ".")); r.pcs = null; r.est = false; r.mlab = null;
+    // список для замены: без поиска — похожие на сказанное и частые; с поиском — каталог, затем справочник блюд
+    const pickList = (r, q) => {
+      const hay = f => sayNorm([f.name, f.brand, f.store, f.alias].join(" ")), ws = sayNorm(q).split(/\s+/).filter(Boolean);
+      const list = q.trim() ? [...byUse(foods), ...DISHES].filter(f => ws.every(w => hay(f).includes(w)))
+        : [...r.cands.map(c => c.f), ...byUse(foods).slice(0, 8)];
+      const cur0 = r.cands[r.fi].f;
+      return [...new Set(list)].slice(0, 12).map(f => `<button class="spi${f === cur0 ? " on" : ""}" data-f="${esc(f.id)}"><span>${esc(foodName(f))}${f.ref ? " · ≈" : ""}</span><small>${storeTag(f)}${per100(f)} на 100 г${f.pc ? ` · ${esc(f.pcName || "штука")} ${fmt(f.pc)} г` : ""}</small></button>`).join("")
+        || `<div class="empty">Ничего не нашлось</div>`;
+    };
+    const closePicks = except => $("sayRows").querySelectorAll(".spick:not([hidden])").forEach(pk => { if (pk === except) return; pk.hidden = true; pk.previousElementSibling.setAttribute("aria-expanded", "false"); });
+    $("sayRows").oninput = e => {
+      if (e.target.classList.contains("spq")){ const [r, , el] = rowOf(e); if (r) el.querySelector(".splist").innerHTML = pickList(r, e.target.value); return; }
+      const [r] = rowOf(e); if (!r || !e.target.classList.contains("sg")) return;
+      const v = num(String(e.target.value).replace(",", ".")), f = r.cands[r.fi].f;
+      if (unitOf(r) === "pc"){ r.pcs = v; r.g = r1(v * f.pc); } else { r.g = v; r.pcs = null; }
+      r.est = false; r.mlab = null;
       if (r.kids?.length) r.base = r.g + r.sub; // правим «осталось» у основного блюда — общий вес пересчитывается
       sync(); };
-    $("sayRows").onclick = e => { const x = e.target.closest("[data-x]"); if (!x) return;
-      const [r, , el] = rowOf(e); r.on = false; el.hidden = true; sync(); };
+    $("sayRows").onclick = e => {
+      const [r, , el] = rowOf(e); if (!r) return;
+      if (e.target.closest("[data-x]")){ r.on = false; el.hidden = true; sync(); return; }
+      const ub = e.target.closest("[data-u]");
+      if (ub){ const f = r.cands[r.fi].f; r.unit = ub.dataset.u; r.est = false; r.mlab = null;
+        if (r.unit === "pc"){ r.pcs = Math.max(0.5, Math.round(r.g / f.pc * 2) / 2); r.g = r1(r.pcs * f.pc); } // 120 г → 2,5 шт → 125 г
+        else r.pcs = null;
+        sync(); return; }
+      const b = e.target.closest("[data-pick]");
+      if (b){ const pk = el.querySelector(".spick"), open = pk.hidden; closePicks(pk);
+        pk.hidden = !open; b.setAttribute("aria-expanded", open);
+        if (open){ const q = pk.querySelector(".spq"); q.value = ""; pk.querySelector(".splist").innerHTML = pickList(r, ""); q.focus({preventScroll: true}); }
+        return; }
+      const it = e.target.closest("[data-f]"); if (!it) return;
+      const f = sayAll().find(x => x.id === it.dataset.f); if (!f) return;
+      let j = r.cands.findIndex(c => c.f === f); if (j < 0){ r.cands.unshift({f, m: 1}); j = 0; }
+      r.fi = j; if (r.key) picked[r.key] = f.id;
+      r.unit = null; if (r.q){ sayGrams(r); r.base = r.g; } // «1 сосиска» — пересчитать по весу штуки нового продукта
+      closePicks(); sync();
+    };
     $("sayAdd").onclick = () => {
       const d = target(), where = d === cur ? "" : ` · ${dayLabel(d)}`, msgs = [], undo = [];
       // исправления дня
