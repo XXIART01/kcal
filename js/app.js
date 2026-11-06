@@ -1,6 +1,6 @@
 (() => {
   // ---------- constants ----------
-  const VERSION = 63;
+  const VERSION = 64;
   // iOS отдаёт выбранный в настройках размер текста через системный шрифт -apple-system-body (17 px по умолчанию):
   // масштабируем интерфейс тем же коэффициентом, но не больше 1,3 — иначе главный экран перестанет помещаться
   (() => { const p = document.createElement("span"); p.style.font = "-apple-system-body"; p.style.position = "absolute"; p.style.visibility = "hidden"; p.textContent = "a";
@@ -251,6 +251,7 @@
           <label class="fld"><span>Магазин</span><input name="store" list="storeList" value="${v("store")}" placeholder="Пятёрочка…"><datalist id="storeList">${STORES.map(s => `<option value="${s}">`).join("")}</datalist></label>
         </div>
         <label class="fld"><span>Коротко для главного экрана</span><input name="short" value="${v("short")}" placeholder="напр. Ряженка — если название длинное"></label>
+        <label class="fld"><span>Как я называю — для «Что съел?»</span><input name="alias" value="${v("alias")}" placeholder="через запятую: картошка, шарики"></label>
         <label class="fld"><span>Категория</span>${catSelect(f ? catOf(f) : "Другое")}</label>
         <div class="grid2">
           <label class="fld"><span>Порция</span><select name="pcName">${PORTIONS.map(p => `<option${p === (f?.pcName || "штука") ? " selected" : ""}>${p}</option>`).join("")}</select></label>
@@ -280,6 +281,8 @@
       if (!out.brand) delete out.brand;
       if (!out.store) delete out.store;
       const sh = String(fd.get("short") || "").trim(); if (sh) out.short = sh;
+      const al = String(fd.get("alias") || "").trim(); if (al) out.alias = al;
+      if (f?.fav) out.fav = true; // правка продукта не снимает звёздочку
       foods = isNew ? [out, ...foods] : foods.map(x => x.id === f.id ? out : x);
       renderFoods(); saveFoods((isNew ? "новый продукт: " : "продукт: ") + out.name);
       if (after) after(out);
@@ -573,6 +576,471 @@
       rememberUnit(f.id ? f : food, box);
       addItem(out);
       if (pick) closeSheet(); else addSheet(meal); // пришли из окна приёма — возвращаемся туда же
+    };
+  }
+
+  // ---------- «Что съел?»: фраза → продукты из моего каталога (без ИИ и интернета) ----------
+  // <parse>
+  const sayNorm = s => String(s || "").toLowerCase().replace(/ё/g, "е").replace(/(\d)[,.](\d)/g, "$1.$2");
+  const NUMW = {ноль:0, один:1, одна:1, одну:1, одно:1, два:2, две:2, три:3, четыре:4, пять:5, шесть:6, семь:7, восемь:8, девять:9, десять:10, одиннадцать:11, двенадцать:12, тринадцать:13, четырнадцать:14, пятнадцать:15, шестнадцать:16, семнадцать:17, восемнадцать:18, девятнадцать:19, двадцать:20, тридцать:30, сорок:40, пятьдесят:50, шестьдесят:60, семьдесят:70, восемьдесят:80, девяносто:90, сто:100, двести:200, триста:300, четыреста:400, пятьсот:500, шестьсот:600, семьсот:700, восемьсот:800, девятьсот:900,
+    пол:0.5, половина:0.5, половину:0.5, половинка:0.5, половинку:0.5, полтора:1.5, полторы:1.5, треть:1/3, трети:1/3, четверть:0.25, четвертинку:0.25};
+  const U_G = {г:1, гр:1, грамм:1, грамма:1, граммов:1, мл:1, миллилитров:1, миллилитра:1, кг:1000, килограмм:1000, килограмма:1000, л:1000, литр:1000, литра:1000, литров:1000};
+  const U_PC = /^(шт|штук|кус|порци|пачк|пачек|упаков|стакан|ложк|ложек|банк|банок|бутыл|пакет|долк|долек|кружк|чашк|тарел|миск|горст|ломт|чл$)/;
+  // бытовые меры — когда у продукта нет своего веса штуки или он про другое: «тарелка борща», «ложка сметаны»
+  const MEASURES = [[/^тарел/, 300, "тарелка"], [/^миск/, 300, "миска"], [/^стакан/, 250, "стакан"], [/^кружк/, 300, "кружка"], [/^чашк/, 200, "чашка"],
+    [/^чл$/, 5, "ч. ложка"], [/^ложк|^ложек/, 15, "ложка"], [/^горст/, 30, "горсть"], [/^ломт/, 20, "ломтик"]];
+  const SAY_FILL = new Set("я мы съел съела съели поел поела ел ела выпил выпила попил попила запиши записать добавь добавить внеси внести занеси сегодня вчера позавчера утром днем вечером ночью на в во с со а также ну там вот это мне пожалуйста почти немного из по к за у был была было как около примерно уже отдельно тоже ещё".split(" "));
+  const SAY_SYN = {яиц:"яйца", яйцо:"яйца"};
+  const SAY_MEALS = [[/^завтрак/, "Завтрак"], [/^обед/, "Обед"], [/^ужин/, "Ужин"], [/^перекус/, "Перекус"]];
+  // глагол в начале куска фразы: добавить (по умолчанию) / удалить / поправить граммы / перенести в другой приём
+  const SAY_VERB = /^(добав|запиш|внес|занес|удал|убер|убра|поправ|исправ|замен|измен|перенес)/;
+  const verbOf = t => /^(добав|запиш|внес|занес)/.test(t) ? "add" : /^(удал|убер|убра)/.test(t) ? "del" : /^перенес/.test(t) ? "move" : "set";
+  // «как вчера», «то же, что в среду на ужин», «повтори вчерашний завтрак»
+  const WD = {понедельник:1, вторник:2, среду:3, четверг:4, пятницу:5, субботу:6, воскресенье:0};
+  const COPY_RE = /(?:^|[\s,;])(?:как|то же(?: самое)?,? что(?: и)?|тоже(?: самое)?,? что(?: и)?|так же,? как|такой же,? как|повтори|повторить)\s+(позавчера|вчера|в\s+(?:понедельник|вторник|среду|четверг|пятницу|субботу|воскресенье))(?![а-я])(?:\s+(?:на|в)?\s*(завтрак|обед|ужин|перекус)[а-я]*)?/;
+  const COPY2_RE = /(?:^|[\s,;])(?:повтори\s+|повторить\s+|как\s+)?(позавчерашн|вчерашн)[а-я]*\s+(завтрак|обед|ужин|перекус)[а-я]*/;
+
+  // справочник обычных блюд — когда в моём каталоге такого нет («тарелка борща»). Значения на 100 г, примерные
+  const DISHES = `Борщ||55|2.5|3|5|300|тарелка
+Щи||35|1.5|2|3|300|тарелка
+Солянка мясная||70|4.5|4.5|2.5|300|тарелка
+Рассольник||45|1.5|2|5.5|300|тарелка
+Суп куриный с лапшой|лапша куриная|45|3|1.5|5|300|тарелка
+Суп гороховый||65|4|2|8|300|тарелка
+Уха||45|5|1.5|3|300|тарелка
+Окрошка на кефире|окрошка|60|3|3|5|300|тарелка
+Суп грибной||35|1.5|1.5|4|300|тарелка
+Харчо||70|4|3.5|7|300|тарелка
+Суп с фрикадельками||50|3|2.5|4|300|тарелка
+Крем-суп грибной|суп-пюре|60|1.5|4|5|300|тарелка
+Том ям||50|4|2.5|3|300|тарелка
+Гречка варёная|гречка гречневая каша|110|4|1|21|200|порция
+Рис варёный|рис|115|2.5|0.5|25|200|порция
+Макароны варёные|макароны паста спагетти|115|4|0.5|23|200|порция
+Картофельное пюре|пюре толченка|90|2|3.5|13|200|порция
+Картофель жареный|жареная картошка|190|3|10|23|200|порция
+Картофель отварной|вареная картошка|80|2|0.3|17|200|порция
+Картофель фри|фри|300|3.5|15|37|100|порция
+Овсянка на воде|овсянка овсяная каша|70|2.5|1.5|12|250|тарелка
+Овсянка на молоке||105|3.5|3.5|14|250|тарелка
+Каша рисовая молочная|рисовая каша|100|3|3|15|250|тарелка
+Каша манная|манка|100|3|3|16|250|тарелка
+Каша пшённая|пшенка|90|3|1|17|250|тарелка
+Булгур варёный|булгур|85|3|0.3|18|200|порция
+Котлета мясная|котлета котлеты|220|14|14|9|80|штука
+Котлета куриная||190|15|11|8|80|штука
+Котлета рыбная||170|12|8|12|80|штука
+Куриная грудка отварная|грудка курица вареная|135|28|2|0|150|порция
+Куриная грудка жареная|грудка жареная|160|28|5|0|150|порция
+Курица запечённая|курица куриное бедро окорочок|210|21|14|0|200|порция
+Гуляш||150|14|9|3|200|порция
+Плов||180|7|8|20|250|порция
+Шашлык свиной|шашлык|250|19|19|1|200|порция
+Шашлык куриный||170|22|9|1|200|порция
+Тефтели||160|10|9|10|200|порция
+Голубцы||110|6|5|10|250|порция
+Отбивная свиная|отбивная|260|18|19|5|150|штука
+Бефстроганов||190|15|13|4|200|порция
+Печень жареная|печень печенка|200|22|9|6|150|порция
+Пельмени варёные|пельмени|250|12|12|25|250|порция
+Вареники с картошкой|вареники|150|4|4|25|250|порция
+Манты||220|10|10|22|250|порция
+Хинкали||220|10|10|22|100|штука
+Шаурма||220|9|11|21|350|штука
+Бургер|гамбургер чизбургер|260|13|12|26|200|штука
+Пицца|пиццы|260|11|10|31|120|кусок
+Ролл Филадельфия|роллы суши|170|7|6|22|250|порция
+Ролл Калифорния||150|5|5|21|250|порция
+Лазанья||170|9|9|13|250|порция
+Спагетти болоньезе|болоньезе|150|7|5|19|300|тарелка
+Паста карбонара|карбонара|200|8|9|21|300|тарелка
+Омлет||150|10|11|2|150|порция
+Яичница|глазунья|200|13|16|1|110|порция
+Яйцо варёное|яйцо яйца вареные|155|12.7|11|0.7|55|штука
+Сырники||220|13|10|19|60|штука
+Блины|блин блинчики|230|6|9|31|50|штука
+Оладьи|оладушки|270|6|11|36|40|штука
+Запеканка творожная|запеканка|170|14|6|15|150|порция
+Гречка с мясом||150|9|6|15|250|порция
+Рыба жареная|рыба|170|18|9|5|150|порция
+Лосось запечённый|лосось семга форель|200|20|13|0|150|порция
+Минтай отварной|минтай|80|17|1|0|150|порция
+Сельдь солёная|селедка сельдь|220|17|17|0|50|порция
+Оливье||200|5|17|7|150|порция
+Цезарь с курицей|цезарь|190|10|14|7|200|порция
+Винегрет||75|1.5|4.5|8|150|порция
+Греческий салат||90|2.5|7|4|200|порция
+Салат из свежих овощей|овощной салат огурцы помидоры|70|1|5|4|150|порция
+Селёдка под шубой|шуба|180|6|14|7|150|порция
+Салат из капусты|капустный салат|50|1.5|3|5|150|порция
+Мимоза||210|8|17|5|150|порция
+Пирожок с капустой|пирожок|230|5|8|33|80|штука
+Пирожок с картошкой||240|5|9|35|80|штука
+Беляш||290|10|17|25|100|штука
+Круассан||410|8|21|45|60|штука
+Пончик||380|6|20|44|70|штука
+Пирожное картошка||380|6|19|47|50|штука
+Торт медовик|медовик торт|400|5|20|50|100|кусок
+Торт наполеон|наполеон|380|5|22|40|100|кусок
+Шоколад молочный|шоколад|550|7|34|54|20|долька
+Конфеты шоколадные|конфета конфеты|520|5|30|58|12|штука
+Печенье|печенька|450|6|18|66|15|штука
+Мороженое пломбир|мороженое|230|3.5|15|21|80|штука
+Зефир||320|1|0|79|30|штука
+Мармелад||320|0|0|80|10|штука
+Вафли|вафля|520|5|30|60|15|штука
+Халва||520|12|30|55|30|порция
+Мёд||320|0.5|0|81|12|ложка
+Варенье|джем|270|0.3|0|70|15|ложка
+Сахар||400|0|0|100|5|ч. ложка
+Молоко 2,5%|молоко|52|2.8|2.5|4.7|250|стакан
+Кефир 1%|кефир|40|3|1|4|250|стакан
+Кефир 2,5%||53|3|2.5|4|250|стакан
+Йогурт питьевой||80|3|2|12|250|бутылка
+Сметана 15%|сметана|160|2.6|15|3|20|ложка
+Сметана 20%||205|2.5|20|3.4|20|ложка
+Творог 5%||120|17|5|2|200|упаковка
+Творог 9%||160|16|9|2|200|упаковка
+Сыр твёрдый|сыр|360|25|28|0|20|ломтик
+Сыр плавленый||250|10|20|5|20|ломтик
+Моцарелла||250|18|19|1|125|упаковка
+Брынза|фета|260|18|20|0|30|порция
+Масло сливочное|масло|750|0.5|82|0.8|10|порция
+Сливки 10%|сливки|120|3|10|4|10|порция
+Сырок глазированный|сырок|410|8|25|38|45|штука
+Хлеб белый|хлеб|260|8|3|50|30|ломтик
+Хлеб чёрный|ржаной бородинский|210|6.5|1.5|42|30|ломтик
+Лаваш||275|9|1|57|50|порция
+Хлебцы||300|10|3|60|10|штука
+Яблоко|яблоки|47|0.4|0.4|10|180|штука
+Апельсин|апельсины|43|0.9|0.2|8|200|штука
+Мандарин|мандарины|38|0.8|0.2|7.5|70|штука
+Груша|груши|47|0.4|0.3|10|180|штука
+Банан|бананы|89|1.1|0.3|23|120|штука
+Виноград||70|0.6|0.2|17|150|порция
+Киви||50|1|0.5|10|75|штука
+Персик|персики|45|0.9|0.1|10|150|штука
+Клубника||35|0.8|0.4|7.5|150|порция
+Арбуз||30|0.6|0.2|7.5|300|кусок
+Дыня||35|0.6|0.3|8|200|кусок
+Огурец|огурцы|15|0.8|0.1|3|100|штука
+Помидор|помидоры томат|20|0.9|0.2|4|120|штука
+Морковь|морковка|35|1.3|0.1|7|80|штука
+Капуста||27|1.8|0.1|5|100|порция
+Авокадо||160|2|15|9|150|штука
+Брокколи||34|2.8|0.4|7|150|порция
+Кофе чёрный|кофе американо эспрессо|2|0.2|0|0.3|200|чашка
+Капучино||45|2.5|2.3|4|250|чашка
+Латте||50|2.6|2.4|4.3|300|стакан
+Чай без сахара|чай|1|0|0|0.2|250|кружка
+Сок апельсиновый|сок|45|0.7|0.2|10|250|стакан
+Кола|кока-кола пепси|42|0|0|10.6|330|банка
+Пиво||43|0.5|0|3.5|500|бутылка
+Вино сухое|вино|70|0|0|0.3|150|бокал
+Компот||60|0.2|0|15|250|стакан
+Морс||40|0.1|0|10|250|стакан
+Энергетик||45|0|0|11|450|банка
+Орехи грецкие|орехи|650|15|65|7|30|горсть
+Миндаль||600|19|53|13|30|горсть
+Арахис||550|26|45|10|30|горсть
+Семечки подсолнечника|семечки|580|21|50|10|30|горсть
+Чипсы||530|6|33|52|140|пачка
+Попкорн||400|8|20|55|50|порция
+Батончик протеиновый|протеиновый батончик|360|30|12|35|50|штука
+Батончик мюсли|мюсли|400|5|12|65|25|штука
+Майонез||630|0.4|67|3|15|ложка
+Кетчуп||100|1.5|0.2|23|15|ложка
+Масло растительное|подсолнечное оливковое|900|0|100|0|10|ложка
+Соевый соус||50|6|0|6|15|ложка
+Хумус||250|8|15|20|50|порция
+Арахисовая паста||600|25|50|20|15|ложка`.split("\n").map(l => { const [name, alias, kcal, p, f, c, pc, pcName] = l.split("|");
+    return {id: "d:" + name, name, alias, kcal: +kcal, p: +p, f: +f, c: +c, ...(+pc ? {pc: +pc, pcName} : {}), ref: true}; });
+
+  // слова считаются одинаковыми, если у них общее начало («банан» ~ «бананы», «сыр» ~ «сыром»)
+  const stemEq = (a, b) => {
+    if (a === b) return true;
+    const [s, l] = a.length <= b.length ? [a, b] : [b, a];
+    if (l.length - s.length > 3) return false;
+    let cp = 0; while (cp < s.length && s[cp] === l[cp]) cp++;
+    return s.length <= 4 ? cp >= 3 && (cp === s.length || a.length === b.length) : cp >= s.length - 1;
+  };
+  const wordEq = (w, x) => stemEq(w, x) || (/^картош(к|ек)/.test(w) && /^карто[фш]/.test(x)); // «картошка» — и картофель, и картошарики
+  // ошибки диктовки: «карташарики», «карта шарики» → картошарики (сравнение с допуском 1–2 буквы)
+  const lev = (a, b) => { const d = Array.from({length: b.length + 1}, (_, j) => j);
+    for (let i = 1; i <= a.length; i++){ let prev = d[0]; d[0] = i;
+      for (let j = 1; j <= b.length; j++){ const t = d[j]; d[j] = Math.min(d[j] + 1, d[j - 1] + 1, prev + (a[i - 1] === b[j - 1] ? 0 : 1)); prev = t; } }
+    return d[b.length]; };
+  const fuzzyEq = (w, x) => { const L = Math.min(w.length, x.length); if (L < 5 || Math.abs(w.length - x.length) > 3) return false;
+    return lev(w.slice(0, L - 1), x.slice(0, L - 1)) <= (L >= 8 ? 2 : 1); };
+  const wordsOf = s => (sayNorm(s).match(/[a-zа-я]+/g) || []).filter(w => w.length >= 3);
+  const foodWords = f => wordsOf(f.name + " " + (f.brand || ""));
+  // запомненный выбор: «сосиска» → продукт, который ты выбрал в прошлый раз (хранится на телефоне)
+  const SAYKEY = "kcal_say";
+  const sayMem = () => { try { return JSON.parse(localStorage.getItem(SAYKEY)) || {}; } catch { return {}; } };
+  const sayKey = words => words.filter(w => /[a-zа-я]{3}/.test(w)).map(w => w.slice(0, 5)).sort().join(" ");
+  // лучшие варианты для слов названия: сначала мой каталог (частые и недавние выше), справочник блюд — ниже.
+  // list — искать в своём списке (записи дня для «убери банан»)
+  function sayCands(words, list){
+    const ws = words.filter(w => /[a-zа-я]{3}/.test(w));
+    if (!ws.length) return [];
+    const pool = list || [...foods, ...DISHES];
+    const strict = sayScore(ws, pool, wordEq, !list, false);
+    if (list || strict[0]?.m === ws.length) return strict;
+    const fz = sayScore(ws, pool, fuzzyEq, true, true); // совпало не всё — может, диктовка исказила слово
+    return fz[0]?.m > (strict[0]?.m || 0) ? fz : strict;
+  }
+  function sayScore(ws, pool, eq, mine, fuzzy){
+    const u = usage(), rc = recent().map(r => r.name), want = mine ? sayMem()[sayKey(ws)] : null;
+    const joined = fuzzy ? ws.slice(1).map((w, i) => ws[i] + w) : []; // «карта шарики» → «карташарики»
+    return pool.map(f => {
+      // «Как я называю» (alias) в карточке продукта — мои слова для него: «картошка», «шарики»
+      const fw = foodWords(f), aw = wordsOf(f.alias || ""); let m = 0, ma = 0;
+      for (const w of ws){ if (aw.some(x => eq(w, x))){ m++; ma++; } else if (fw.some(x => eq(w, x))) m++; }
+      for (const w of joined) if (fw.some(x => eq(w, x)) || aw.some(x => eq(w, x))) m += 2;
+      if (f.id === want) m = Math.max(m, ws.length); // выбирал его раньше на эти же слова
+      if (!m) return null;
+      m = Math.min(m, ws.length);
+      const ri = rc.indexOf(foodName(f));
+      const sc = m * 10 + (fw[0] && ws.some(w => eq(w, fw[0])) ? 5 : 0) + (ma ? 3 : 0) + (f.id === want ? 100 : 0) + (f.ref ? -6 : 0)
+        - (ws.length - m) * 4 - Math.max(0, fw.length - m) * 0.4
+        + Math.min(useN(u, f.id), 10) * 0.3 + (ri >= 0 ? 1 - ri * 0.05 : 0) + (f.fav ? 0.5 : 0);
+      return {f, sc, m};
+    }).filter(c => c && c.m / ws.length >= 0.5).sort((a, b) => b.sc - a.sc).slice(0, 5);
+  }
+  // сколько граммов: «150 г» — граммы, «2 куска» — штуки × вес штуки, «тарелка» — бытовая мера, голое «2» — штуки
+  const sayPcs = q => q && (q.u === "pc" || (q.u === null && q.n <= 6)); // «1 сосиска», «яйца 2» — штуки
+  function sayGrams(r){
+    const f = r.cands[r.fi].f, q = r.q; r.est = false; r.pcs = null; r.mlab = null;
+    if (!q){ r.g = defaultG(f); r.est = true; return; }
+    if (q.u === "g"){ r.g = r1(q.n * q.k); return; }
+    if (!sayPcs(q)){ r.g = r1(q.n); return; }
+    const ms = q.mw && MEASURES.find(([re]) => re.test(q.mw));
+    const own = f.pc && (!ms || sayNorm(f.pcName || "штука").slice(0, 4) === ms[2].slice(0, 4)); // «ложка сиропа» — его собственная ложка
+    if (own){ r.g = r1(q.n * f.pc); r.pcs = q.n; }
+    else if (ms){ r.g = r1(q.n * ms[1]); r.mlab = ms[2]; r.mn = q.n; }
+    else { r.g = defaultG(f); r.est = true; }
+  }
+  // «343 г картошки, из них 1 сосиска»: вес вложенного вычитается из основного блюда
+  function saySettle(rows){
+    for (const p of rows) if (p.kids?.length){
+      p.sub = p.kids.filter(k => k.on !== false).reduce((s, k) => s + num(k.g), 0);
+      p.g = Math.max(0, r1(p.base - p.sub)); p.pcs = null; p.mlab = null;
+    }
+  }
+  const sayKnown = w => [...foods, ...DISHES].some(f => foodWords(f).some(x => stemEq(w, x)));
+  function sayParse(text){
+    let tx = sayNorm(text).replace(/чайн[а-я]* ложк[а-я]*/g, "чл").replace(/столов[а-я]* ложк/g, "ложк");
+    // «как вчера на завтрак» — скопировать приём из другого дня (вырезаем, чтобы «вчера» не стало датой записи)
+    let copy = null; const cm = tx.match(COPY_RE), cm2 = !cm && tx.match(COPY2_RE);
+    if (cm){ const d = cm[1]; copy = {ref: d === "вчера" ? -1 : d === "позавчера" ? -2 : "w" + WD[d.replace(/^в\s+/, "")], meal: cm[2] ? SAY_MEALS.find(([re]) => re.test(cm[2]))[1] : null}; tx = tx.replace(cm[0], " , "); }
+    else if (cm2){ copy = {ref: cm2[1] === "вчерашн" ? -1 : -2, meal: SAY_MEALS.find(([re]) => re.test(cm2[2]))[1]}; tx = tx.replace(cm2[0], " , "); }
+    const has1 = re => new RegExp("(^|[^а-я])(" + re + ")(?![а-я])").test(tx);
+    const dayOff = has1("позавчера") ? -2 : has1("вчера") ? -1 : has1("сегодня") ? 0 : null; // от настоящего «сегодня»
+    // «из них», «в том числе», «включая»… — следующий кусок фразы лежит внутри предыдущего (помечаем знаком §)
+    const clauses = tx.replace(/(^|[\s,;])(из них|в том числе|включая|в них была|в них были|в них было|в них был|в них|в нем была|в нем были|в нем было|в нем был|в нем|в ней была|в ней были|в ней было|в ней был|в ней|там была|там были|там было|там был|среди них была|среди них были|из которых|из этого|вычти|вычесть|минус|не считая)(?=\s)/g, "$1, § ").split(/[,;\n!?]+|\.(?!\d)|\s(?:и|плюс|еще|потом|затем)\s/);
+    const rows = [], miss = [], edits = []; let stick = null, lastMain = null, firstMeal = null, act = "add";
+    for (const cl of clauses){
+      const toks = cl.match(/§|\d+(?:\.\d+)?%?|[a-zа-я]+/g) || [], els = []; let clMeal = null, clFrom = null, inner = false;
+      for (let i = 0; i < toks.length; i++){
+        const t = toks[i];
+        if (t === "§"){ inner = true; continue; }
+        if (SAY_VERB.test(t)){ act = verbOf(t); continue; } // глагол действует и на следующие куски: «убери банан и творог»
+        if (/^\d/.test(t)){ if (!t.endsWith("%")) els.push({n: parseFloat(t)}); continue; } // «0,3%» — часть названия
+        if (NUMW.hasOwnProperty(t)){ let v = 0; while (i < toks.length && NUMW.hasOwnProperty(toks[i])) v += NUMW[toks[i++]]; i--; els.push({n: v}); continue; }
+        // «полпачки», «полсамсы» — половина
+        if (/^пол[а-я]{3,}/.test(t)){ const rest = t.slice(3); if (U_PC.test(rest) || U_G.hasOwnProperty(rest) || sayKnown(rest)){ els.push({n: 0.5}, {w: rest}); continue; } }
+        const ml = SAY_MEALS.find(([re]) => re.test(t));
+        if (ml){ if (["из", "с", "со"].includes(toks[i - 1])) clFrom = ml[1]; else clMeal = ml[1]; continue; }
+        els.push({w: t});
+      }
+      if (clMeal && act === "add"){ stick = clMeal; firstMeal ||= clMeal; }
+      const items = [];
+      for (let i = 0; i < els.length; i++){
+        const e = els[i];
+        if (e.n !== undefined){
+          const nx = els[i + 1]?.w; let u = null, k = 1, mw = null;
+          if (nx && U_G.hasOwnProperty(nx)){ u = "g"; k = U_G[nx]; i++; } else if (nx && U_PC.test(nx)){ u = "pc"; mw = nx; i++; }
+          items.push({q: {n: e.n, u, k, mw}});
+        } else if (!SAY_FILL.has(e.w) && !U_G.hasOwnProperty(e.w)){
+          if (U_PC.test(e.w)){ if (MEASURES.some(([re]) => re.test(e.w))) items.push({q: {n: 1, u: "pc", k: 1, mw: e.w}}); } // «тарелка борща» = 1 тарелка
+          else items.push({w: SAY_SYN[e.w] || e.w});
+        }
+      }
+      // «хлеб 2 куска» — количество после названия; «два куска хлеба» — перед названием
+      const pairs = []; let run = [], pend = null;
+      if (items[0]?.q){
+        for (const x of items){ if (x.q){ if (run.length){ pairs.push([run, pend]); run = []; } pend = x.q; } else run.push(x.w); }
+        if (run.length) pairs.push([run, pend]);
+      } else {
+        for (const x of items){ if (x.q){ if (run.length){ pairs.push([run, x.q]); run = []; } } else run.push(x.w); }
+        if (run.length) pairs.push([run, null]);
+      }
+      for (const [words, q] of pairs){
+        if (act !== "add"){ edits.push({act, words, q, from: clFrom || (act === "move" ? null : clMeal), to: act === "move" ? clMeal : null}); continue; }
+        const cands = sayCands(words);
+        if (!cands.length){ miss.push(words.join(" ")); continue; }
+        // названы штуки — из одинаково подходящих берём тот, у которого известен вес штуки
+        const fi = sayPcs(q) && !q.mw?.match(/^(тарел|миск|стакан|кружк|чашк|чл|ложк|ложек|горст|ломт)/) ? Math.max(0, cands.findIndex(c => c.m === cands[0].m && c.f.pc)) : 0;
+        const has = x => cands.some(c => c.m === cands[0].m && c.f === x.cands[x.fi].f); // тот же продукт, что уже назван
+        // «вычти сосиску», «запиши картошку отдельно» — это о том, что уже названо, а не новая еда
+        if (inner && lastMain?.kids?.some(has)) continue;
+        if (!q && rows.some(has)) continue;
+        const r = {cands, fi, q, meal: stick, key: sayKey(words)}; sayGrams(r); r.base = r.g;
+        if (inner && lastMain){ r.parent = lastMain; (lastMain.kids ||= []).push(r); } else lastMain = r;
+        rows.push(r);
+      }
+    }
+    rows.forEach(r => r.meal ||= firstMeal); // «… запиши в завтрак» в конце — тоже про всё сказанное раньше
+    saySettle(rows);
+    return {rows, miss, edits, dayOff, copy, meal: firstMeal};
+  }
+  // </parse>
+
+  function saySheet(){
+    let meal = guessMeal(), parsed = {rows: [], miss: [], edits: []}, tm, seq = 0;
+    // куда писать: «вчера» / «позавчера» во фразе — от настоящего сегодня, иначе открытый день
+    const targetOf = p => p.dayOff == null ? cur : addDays(todayIso(), p.dayOff), target = () => targetOf(parsed);
+    const dayLabel = d => d === todayIso() ? "сегодня" : d === addDays(todayIso(), -1) ? "вчера, " + ruDate(d) : ruDate(d);
+    const docOf = async d => d === cur ? day : weekDocs[d] || await Store.read(dayPath(d)).then(r => r?.data || blank(d), () => blank(d));
+    const mealOf = it => MEALS.includes(it.meal) ? it.meal : "Перекус";
+    // «как в среду»: ближайшая прошедшая среда
+    const copyDate = ref => { if (typeof ref === "number") return addDays(todayIso(), ref);
+      const wd = +ref.slice(1); for (let i = 1; i <= 7; i++){ const d = addDays(todayIso(), -i); if (parseIso(d).getDay() === wd) return d; } };
+    openSheet(`<h2>Что съел?</h2>
+      <div class="hint">Напиши или надиктуй (микрофон на клавиатуре). Например: «картошарики 150 г, два куска хлеба фитнес», «343 г картошариков, из них одна сосиска», «тарелка борща», «как вчера на завтрак». Исправить: «поправь творог на 200», «убери банан из перекуса», «перенеси творог в ужин».</div>
+      <textarea class="say" id="sayT" rows="3" placeholder="Что и сколько съел…" aria-label="Что съел" autocomplete="off"></textarea>
+      <div class="sayday" id="sayDay"></div>
+      <div class="cap">Приём пищи</div>
+      <div class="chips seg" id="sayMeal">${MEALS.map(m => `<button class="chip${m === meal ? " on" : ""}" data-m="${m}">${m}</button>`).join("")}</div>
+      <div id="sayRows"></div>
+      <div class="sayfoot"><button class="btn" id="sayAdd" disabled>Добавить</button></div>`);
+    $("sayT").focus({preventScroll: true}); // в том же нажатии — тогда iOS сразу открывает клавиатуру
+    const X = `<svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>`;
+    const live = () => parsed.rows.filter(r => r.on !== false && r.g > 0);
+    const plan = () => (parsed.plan || []).filter(x => !x.miss);
+    const total = () => {
+      const k = live().reduce((s, r) => s + portionOf(r.cands[r.fi].f, r.g).kcal, 0), n = live().length, e = plan().length;
+      $("sayAdd").disabled = !n && !e;
+      $("sayAdd").textContent = [n ? `Добавить · ${fmt(k)} ккал` : "", e ? `${n ? "изменить" : "Изменить"} · ${e}` : ""].filter(Boolean).join(" · ") || "Добавить";
+    };
+    const upd = i => {
+      const r = parsed.rows[i], el = $("sayRows").querySelector(`[data-i="${i}"]`); if (!el) return;
+      const f = r.cands[r.fi].f, c = portionOf(f, r.g);
+      el.querySelector(".sres").textContent = `${fmt(c.kcal)} ккал · Б ${fmt(c.p, 1)} · Ж ${fmt(c.f, 1)} · У ${fmt(c.c, 1)}`;
+      const n = el.querySelector(".snote");
+      const kids = (r.kids || []).filter(k => k.on !== false);
+      n.textContent = [r.meal && r.meal !== meal ? "→ " + r.meal.toLowerCase() : "",
+        kids.length ? `${fmt(r.base)} г всего − ${kids.map(k => `${k.cands[k.fi].f.name.split(" ")[0].toLowerCase()} ${fmt(k.g)} г`).join(", ")}` : "",
+        r.pcs ? `${fmt(r.pcs, 1)} × ${pcLabel(f)} ${fmt(f.pc)} г` : "",
+        r.mlab ? `${fmt(r.mn, 1)} × ${r.mlab} ≈ ${fmt(r.g)} г` : "",
+        f.ref ? "≈ справочные КБЖУ, не из каталога" : "",
+        r.est ? (r.q ? "Вес порции у продукта не указан — поставил обычную, проверь граммы" : "Количество не названо — поставил обычную порцию, проверь граммы") : ""].filter(Boolean).join(" · ");
+      n.hidden = !n.textContent; n.classList.toggle("warn", r.est);
+    };
+    const paintMeal = () => $("sayMeal").querySelectorAll(".chip").forEach(x => x.classList.toggle("on", x.dataset.m === meal));
+    // после правки одной строки пересчитать связанные («всего − вложенное») и обновить цифры
+    const sync = () => { saySettle(parsed.rows);
+      $("sayRows").querySelectorAll("[data-i]").forEach(el => { const i = +el.dataset.i, inp = el.querySelector(".sg");
+        if (inp !== document.activeElement) inp.value = r1(parsed.rows[i].g); upd(i); }); total(); };
+    const draw = () => {
+      const d = target(); $("sayDay").textContent = "Запишу в: " + dayLabel(d); $("sayDay").classList.toggle("other", d !== cur);
+      const ms = new Set(parsed.rows.map(r => r.meal)); // во всей фразе один приём («на ужин …») — выбираем его
+      if (ms.size === 1 && [...ms][0]){ meal = [...ms][0]; paintMeal(); }
+      $("sayRows").innerHTML = (parsed.plan || []).map(x => x.miss ? `<div class="hint warnline">${esc(x.miss)}</div>` : `<div class="erow">${esc(x.text)}</div>`).join("")
+        + (parsed.copyNote ? `<div class="hint ${parsed.copyEmpty ? "warnline" : ""}">${esc(parsed.copyNote)}</div>` : "")
+        + parsed.rows.map((r, i) => `<div class="srow" data-i="${i}">
+        <select class="sname" aria-label="Продукт">${r.cands.map((c, j) => `<option value="${j}"${j === r.fi ? " selected" : ""}>${esc(foodName(c.f))}${c.f.ref ? " · ≈" : ""}</option>`).join("")}</select>
+        <div class="sline"><input class="sg" inputmode="decimal" value="${r1(r.g)}" aria-label="Граммы"><span class="su">г</span><span class="sres"></span><button class="sx" data-x="${i}" aria-label="Убрать">${X}</button></div>
+        <small class="snote" hidden></small></div>`).join("")
+        + (parsed.miss.length ? `<div class="hint warnline">Не нашёл ни в каталоге, ни в справочнике: ${esc(parsed.miss.join(", "))}. Добавь через «+» у приёма пищи.</div>` : "");
+      parsed.rows.forEach((_, i) => upd(i)); total();
+    };
+    // строки из записей другого дня («как вчера на завтрак»): тот же продукт и вес
+    const fromItem = (it, m) => {
+      const g = num(it.g) || 100, k = 100 / g, real = foods.find(f => f.id === it.food);
+      const f = real || {id: it.food, name: it.name, short: it.short, kcal: num(it.kcal) * k, p: num(it.p) * k, f: num(it.f) * k, c: num(it.c) * k, ...(it.pcs ? {pc: g / it.pcs, pcName: it.pcName} : {})};
+      const r = {cands: [{f, m: 1}], fi: 0, q: null, meal: m, key: "", g, base: g};
+      if (it.pcs && f.pc){ r.pcs = it.pcs; }
+      return r;
+    };
+    // «убери банан», «поправь творог на 200», «перенеси творог в ужин» — ищем в записях дня
+    const planEdits = async p => {
+      const d = targetOf(p), items = (await docOf(d)).items || [], out = [], used = new Set();
+      for (const e of p.edits){
+        const what = e.words.join(" ");
+        const pool = items.filter(it => !used.has(it.id) && (!e.from || mealOf(it) === e.from)).map(it => ({id: it.id, name: it.name, it}));
+        const c = sayCands(e.words, pool)[0];
+        if (!c){ out.push({miss: `Не нашёл в ${dayLabel(d)}${e.from ? " (" + e.from.toLowerCase() + ")" : ""}: ${what}`}); continue; }
+        const it = c.f.it; used.add(it.id);
+        if (e.act === "del"){ out.push({it, del: true, text: `Удалить: ${it.name} · ${mealOf(it).toLowerCase()} · ${fmt(it.kcal)} ккал`}); continue; }
+        if (e.act === "move"){
+          if (!e.to || e.to === mealOf(it)){ out.push({miss: `Куда перенести «${what}»? Скажи: «перенеси ${what} в ужин»`}); continue; }
+          out.push({it, put: {...it, meal: e.to}, text: `${it.name}: ${mealOf(it).toLowerCase()} → ${e.to.toLowerCase()}`}); continue;
+        }
+        const g0 = num(it.g);
+        if (!e.q || !g0){ out.push({miss: `Сколько должно быть «${what}»? Скажи: «поправь ${what} на 200 грамм»`}); continue; }
+        const per = g0 / (num(it.pcs) || 1), pcs = e.q.u !== "g" && sayPcs(e.q) && it.pcs;
+        const g = r1(e.q.u === "g" ? e.q.n * e.q.k : pcs ? e.q.n * per : e.q.n), k = g / g0;
+        const put = {...it, g, kcal: Math.round(num(it.kcal) * k), p: r1(num(it.p) * k), f: r1(num(it.f) * k), c: r1(num(it.c) * k)};
+        if (pcs) put.pcs = e.q.n; else { delete put.pcs; delete put.pcName; }
+        out.push({it, put, text: `${it.name}: ${fmt(g0)} г → ${fmt(g)} г · ${fmt(it.kcal)} → ${fmt(put.kcal)} ккал`});
+      }
+      return out;
+    };
+    const rebuild = async () => {
+      const my = ++seq, p = sayParse($("sayT").value);
+      if (p.copy){
+        const src = copyDate(p.copy.ref), its = ((await docOf(src)).items || []).filter(it => !p.copy.meal || mealOf(it) === p.copy.meal);
+        const what = `${p.copy.meal ? p.copy.meal.toLowerCase() + " · " : ""}${dayLabel(src)}`;
+        p.copyNote = its.length ? `Повторяю: ${what}` : `В ${what} ничего не записано`; p.copyEmpty = !its.length;
+        if (!p.meal && p.copy.meal) p.rows.forEach(r => r.meal ||= p.copy.meal); // «как вчера на ужин и борщ» — борщ тоже в ужин
+        p.rows = [...its.map(it => fromItem(it, p.meal || p.copy.meal || mealOf(it))), ...p.rows];
+      }
+      if (p.edits.length) p.plan = await planEdits(p);
+      if (my !== seq) return; // пока ждали другой день, фразу уже поменяли
+      parsed = p; draw();
+    };
+    $("sayT").oninput = () => { clearTimeout(tm); tm = setTimeout(rebuild, 200); };
+    $("sayMeal").onclick = e => { const b = e.target.closest("[data-m]"); if (!b) return; meal = b.dataset.m; paintMeal();
+      parsed.rows.forEach((r, i) => { r.meal = null; upd(i); }); }; // выбранный вручную приём важнее сказанного
+    const rowOf = e => { const el = e.target.closest("[data-i]"); return el ? [parsed.rows[+el.dataset.i], +el.dataset.i, el] : []; };
+    $("sayRows").onchange = e => { const [r] = rowOf(e); if (!r || !e.target.classList.contains("sname")) return;
+      r.fi = +e.target.value; if (r.q){ sayGrams(r); r.base = r.g; } sync(); };
+    $("sayRows").oninput = e => { const [r] = rowOf(e); if (!r || !e.target.classList.contains("sg")) return;
+      r.g = num(String(e.target.value).replace(",", ".")); r.pcs = null; r.est = false; r.mlab = null;
+      if (r.kids?.length) r.base = r.g + r.sub; // правим «осталось» у основного блюда — общий вес пересчитывается
+      sync(); };
+    $("sayRows").onclick = e => { const x = e.target.closest("[data-x]"); if (!x) return;
+      const [r, , el] = rowOf(e); r.on = false; el.hidden = true; sync(); };
+    $("sayAdd").onclick = () => {
+      const d = target(), where = d === cur ? "" : ` · ${dayLabel(d)}`, msgs = [], undo = [];
+      // исправления дня
+      const ch = plan();
+      if (ch.length){
+        const puts = ch.filter(x => x.put).map(x => x.put), dels = ch.filter(x => x.del).map(x => x.it.id);
+        if (puts.length) mutateDay(d, {t: "puts", items: puts}, `исправлено (фразой): ${puts.map(x => x.name).join(", ")}`);
+        if (dels.length) mutateDay(d, {t: "dels", ids: dels}, `удалено (фразой): ${ch.filter(x => x.del).map(x => x.it.name).join(", ")}`);
+        undo.push(() => mutateDay(d, {t: "puts", items: ch.map(x => x.it)}, "отменено: исправление фразой"));
+        msgs.push(`Изменено ${ch.length}`);
+      }
+      // новая еда
+      const rows = live();
+      if (rows.length){
+        const items = rows.map(r => { const f = r.cands[r.fi].f;
+          const out = {id: newId("m"), name: foodName(f), meal: r.meal || meal, time: nowTime(), g: r1(r.g), ...portionOf(f, r.g)};
+          if (f.id && !f.ref) out.food = f.id;
+          if (r.pcs){ out.pcs = r.pcs; out.pcName = pcLabel(f); }
+          if (f.short) out.short = f.short; return out; });
+        // запомнить выбор там, где было из чего выбирать: в следующий раз подставится сразу
+        const mem = sayMem(); rows.forEach(r => { if (r.cands.length > 1 && r.key) mem[r.key] = r.cands[r.fi].f.id; }); localStorage.setItem(SAYKEY, JSON.stringify(mem));
+        items.forEach(remember); bumpUsage(items);
+        mutateDay(d, {t: "puts", items}, `добавлено (фразой): ${items.map(x => x.name).join(", ")}`);
+        undo.push(() => mutateDay(d, {t: "dels", ids: items.map(x => x.id)}, "отменено: что съел"));
+        msgs.push(`Добавлено ${items.length} · ${fmt(items.reduce((s, x) => s + x.kcal, 0))} ккал`);
+      }
+      if (!msgs.length) return;
+      closeSheet();
+      toast(msgs.join(" · ") + where, "Отменить", () => undo.forEach(f => f()));
     };
   }
 
@@ -1115,6 +1583,13 @@
     pending.push({date: d, op, msg}); savePending(); saveCache();
     flush();
   }
+  // то же для любого дня (не открытого): правка уходит в очередь, полоса дней обновляется
+  function mutateDay(d, op, msg){
+    if (d === cur) return mutate(op, msg);
+    weekDocs[d] = applyOp(weekDocs[d] || blank(d), op); renderWeek();
+    pending.push({date: d, op, msg}); savePending(); saveCache();
+    flush();
+  }
   let flushing = false;
   async function flush(){
     if (flushing || !pending.length) return;
@@ -1383,6 +1858,7 @@
   hscroll($("foodCats"));
   $("foodCats").onclick = e => { const b = e.target.closest("[data-cat]"); if (b){ foodCat = b.dataset.cat; renderFoods(); } };
   $("scanBtn").onclick = () => scanSheet();
+  $("sayBtn").onclick = saySheet;
   $("progSeg").onclick = e => { const b = e.target.closest("[data-ps]"); if (b && b.dataset.ps !== progSec){ progSec = b.dataset.ps; renderProg(); scrollTo(0, 0); } };
   $("supBtn").onclick = supSheet;
   $("foodList").onclick = e => {

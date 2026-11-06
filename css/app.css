@@ -862,3 +862,24 @@ section:not([hidden])>*{animation:rise .55s var(--ease-ios) both}
 
 /* КБЖУ на одну штуку под строкой «на 100 г» */
 .item .nm small.pcl{display:block;margin-top:2px;color:var(--mute)}
+
+/* «Что съел?»: окно разбора фразы (вход — значок микрофона в шапке) */
+.say{display:block;width:100%;min-height:78px;border-radius:14px;border:0;background:rgba(255,255,255,.045);box-shadow:inset 0 0 0 1px rgba(255,255,255,.08);color:var(--ink);padding:12px 14px;font:inherit;font-size:16px;resize:none;-webkit-appearance:none;margin:0 0 4px}
+.say:focus{outline:none;box-shadow:inset 0 0 0 1px rgba(140,180,255,.45),0 0 0 3px rgba(80,140,255,.15)}
+.srow{padding:10px 0;border-top:1px solid rgba(255,255,255,.07)}
+.srow:first-child{border-top:0}
+.sname{width:100%;height:40px;border-radius:11px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.045);color:var(--ink);padding:0 10px;font:inherit;font-size:15px}
+.sline{display:flex;align-items:center;gap:8px;margin-top:8px}
+.sg{width:78px;height:38px;border-radius:10px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.045);color:var(--ink);padding:0 10px;font:inherit;font-size:16px;text-align:right}
+.sline .su{color:var(--mute);font-size:14px}
+.sres{flex:1;min-width:0;font-size:12px;color:var(--faint);font-variant-numeric:tabular-nums}
+.sx{flex:none;width:32px;height:32px;border-radius:50%;display:grid;place-items:center;color:var(--mute)}
+.sx .ico{width:16px;height:16px}
+.snote{display:block;margin-top:4px;font-size:12px;color:var(--faint)}
+.snote.warn,.warnline{color:#ffc53d}
+#sayRows{margin:6px 0 4px}
+.sayfoot{position:sticky;bottom:calc(-1*var(--sab) - 16px);margin:0 calc(-1*var(--page));padding:14px var(--page) 4px;background:linear-gradient(180deg,rgba(14,14,17,0),rgba(14,14,17,.96) 38%)}
+.sayfoot .btn{margin-top:0}
+.sayday{font-size:13px;color:var(--mute);margin:2px 0 8px}
+.sayday.other{color:#ffc53d}
+.erow{padding:10px 12px;margin:6px 0;border-radius:12px;background:rgba(255,255,255,.045);font-size:14px}
