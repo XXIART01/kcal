@@ -1,6 +1,6 @@
 (() => {
   // ---------- constants ----------
-  const VERSION = 64;
+  const VERSION = 65;
   // iOS отдаёт выбранный в настройках размер текста через системный шрифт -apple-system-body (17 px по умолчанию):
   // масштабируем интерфейс тем же коэффициентом, но не больше 1,3 — иначе главный экран перестанет помещаться
   (() => { const p = document.createElement("span"); p.style.font = "-apple-system-body"; p.style.position = "absolute"; p.style.visibility = "hidden"; p.textContent = "a";
@@ -914,7 +914,7 @@
       <div class="chips seg" id="sayMeal">${MEALS.map(m => `<button class="chip${m === meal ? " on" : ""}" data-m="${m}">${m}</button>`).join("")}</div>
       <div id="sayRows"></div>
       <div class="sayfoot"><button class="btn" id="sayAdd" disabled>Добавить</button></div>`);
-    $("sayT").focus({preventScroll: true}); // в том же нажатии — тогда iOS сразу открывает клавиатуру
+    try { $("sayT").focus({preventScroll: true}); } catch {} // в том же нажатии — тогда iOS сразу открывает клавиатуру
     const X = `<svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>`;
     const live = () => parsed.rows.filter(r => r.on !== false && r.g > 0);
     const plan = () => (parsed.plan || []).filter(x => !x.miss);
@@ -1858,7 +1858,10 @@
   hscroll($("foodCats"));
   $("foodCats").onclick = e => { const b = e.target.closest("[data-cat]"); if (b){ foodCat = b.dataset.cat; renderFoods(); } };
   $("scanBtn").onclick = () => scanSheet();
-  $("sayBtn").onclick = saySheet;
+  $("sayBtn").onclick = () => { try { saySheet(); } catch (e){ toast("«Что съел?» не открылось: " + e.message); } };
+  // ошибка в коде — коротко на экран: на телефоне консоли нет, а так есть что прислать
+  addEventListener("error", e => toast("Ошибка: " + (e.message || "неизвестная")));
+  addEventListener("unhandledrejection", e => toast("Ошибка: " + (e.reason?.message || e.reason)));
   $("progSeg").onclick = e => { const b = e.target.closest("[data-ps]"); if (b && b.dataset.ps !== progSec){ progSec = b.dataset.ps; renderProg(); scrollTo(0, 0); } };
   $("supBtn").onclick = supSheet;
   $("foodList").onclick = e => {

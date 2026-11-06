@@ -883,3 +883,5 @@ section:not([hidden])>*{animation:rise .55s var(--ease-ios) both}
 .sayday{font-size:13px;color:var(--mute);margin:2px 0 8px}
 .sayday.other{color:#ffc53d}
 .erow{padding:10px 12px;margin:6px 0;border-radius:12px;background:rgba(255,255,255,.045);font-size:14px}
+/* окно видно сразу при открытии (иначе поле в нём нельзя сфокусировать в момент нажатия), а при закрытии — до конца анимации */
+.sheet.on{transition:transform .55s var(--ease-ios),visibility 0s}
