@@ -908,3 +908,29 @@ section:not([hidden])>*{animation:rise .55s var(--ease-ios) both}
 .sunit button{height:32px;min-width:32px;padding:0 8px;border-radius:8px;font-size:13px;color:var(--mute)}
 .sunit button.on{background:rgba(255,255,255,.14);color:var(--ink);font-weight:600}
 .sunit .su{padding:0 8px;line-height:32px}
+/* «Что съел?»: поле ввода легче — обычный вес, 16 px (меньше iOS увеличивает страницу при вводе), две строки сразу */
+.say{font-weight:400;font-size:16px;line-height:1.35;min-height:0;padding:10px 12px;color:rgba(255,255,255,.88)}
+.say::placeholder{color:var(--mute)}
+/* группы по приёмам, когда во фразе их несколько */
+.sgroup{display:flex;justify-content:space-between;align-items:baseline;margin:14px 0 2px;padding-top:10px;border-top:1px solid rgba(255,255,255,.1)}
+.sgroup:first-child{margin-top:4px;border-top:0;padding-top:0}
+.sgroup b{font-size:15px;font-weight:600}
+.sgroup span{font-size:13px;color:var(--mute);font-variant-numeric:tabular-nums}
+.sgroup+.srow{border-top:0}
+/* «Что съел?»: главное — поле фразы. Оно крупнее (≈5 строк), шрифт 15 px; всё ниже — компактнее */
+.say{font-size:15px;line-height:1.4;min-height:128px;padding:12px 14px}
+#sayMealCap{display:none}
+#sayMeal{margin:4px 0 6px}
+#sayMeal .chip{height:30px;font-size:13px}
+.sheet .sayday{margin:4px 0 6px;font-size:12px}
+.srow{padding:8px 0}
+.sname{height:34px;font-size:14px;padding:0 10px;border-radius:10px}
+.sline{margin-top:6px;gap:6px}
+.sg{height:32px;width:64px;font-size:15px;padding:0 8px;border-radius:9px}
+.sunit button{height:28px;min-width:28px;font-size:12px;padding:0 7px}
+.sunit .su{line-height:28px}
+.sres{font-size:11.5px}
+.sx{width:28px;height:28px}
+.snote{font-size:11.5px;margin-top:3px}
+.sgroup{margin:10px 0 0;padding-top:8px}
+.sgroup b{font-size:14px}

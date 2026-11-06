@@ -1,6 +1,6 @@
 (() => {
   // ---------- constants ----------
-  const VERSION = 70;
+  const VERSION = 72;
   // iOS отдаёт выбранный в настройках размер текста через системный шрифт -apple-system-body (17 px по умолчанию):
   // масштабируем интерфейс тем же коэффициентом, но не больше 1,3 — иначе главный экран перестанет помещаться
   (() => { const p = document.createElement("span"); p.style.font = "-apple-system-body"; p.style.position = "absolute"; p.style.visibility = "hidden"; p.textContent = "a";
@@ -905,6 +905,7 @@
   function saySheet(){
     let meal = guessMeal(), parsed = {rows: [], miss: [], edits: []}, tm, seq = 0;
     const picked = {}; // слова фразы → продукт, выбранный вручную в этом окне
+    let multi = false; // во фразе несколько приёмов («на завтрак …, на обед …») — строки по группам
     // куда писать: «вчера» / «позавчера» во фразе — от настоящего сегодня, иначе открытый день
     const targetOf = p => p.dayOff == null ? cur : addDays(todayIso(), p.dayOff), target = () => targetOf(parsed);
     const dayLabel = d => d === todayIso() ? "сегодня" : d === addDays(todayIso(), -1) ? "вчера, " + ruDate(d) : ruDate(d);
@@ -915,9 +916,9 @@
       const wd = +ref.slice(1); for (let i = 1; i <= 7; i++){ const d = addDays(todayIso(), -i); if (parseIso(d).getDay() === wd) return d; } };
     openSheet(`<h2>Что съел?</h2>
       <div class="hint">Скажи, что и сколько: «на обед гречка 200 г, две котлеты и чай». Исправить: «поправь гречку на 150», «убери чай».</div>
-      <textarea class="say" id="sayT" rows="3" placeholder="Что и сколько съел…" aria-label="Что съел" autocomplete="off"></textarea>
+      <textarea class="say" id="sayT" rows="2" placeholder="Что и сколько съел…" aria-label="Что съел" autocomplete="off"></textarea>
       <div class="sayday" id="sayDay"></div>
-      <div class="cap">Приём пищи</div>
+      <div class="cap" id="sayMealCap">Приём пищи</div>
       <div class="chips seg" id="sayMeal">${MEALS.map(m => `<button class="chip${m === meal ? " on" : ""}" data-m="${m}">${m}</button>`).join("")}</div>
       <div id="sayRows"></div>
       <div class="sayfoot"><button class="btn" id="sayAdd" disabled>Добавить</button></div>`);
@@ -932,6 +933,9 @@
     const total = () => {
       const k = live().reduce((s, r) => s + portionOf(r.cands[r.fi].f, r.g).kcal, 0), n = live().length, e = plan().length;
       $("sayAdd").disabled = !n && !e;
+      // сумма по каждому приёму в заголовке группы
+      $("sayRows").querySelectorAll("[data-gm]").forEach(h => { const rs = live().filter(r => r.meal === h.dataset.gm);
+        h.querySelector("span").textContent = `${rs.length} · ${fmt(rs.reduce((s, r) => s + portionOf(r.cands[r.fi].f, r.g).kcal, 0))} ккал`; });
       $("sayAdd").textContent = [n ? `Добавить · ${fmt(k)} ккал` : "", e ? `${n ? "изменить" : "Изменить"} · ${e}` : ""].filter(Boolean).join(" · ") || "Добавить";
     };
     const upd = i => {
@@ -946,7 +950,7 @@
       el.querySelector(".sres").textContent = `${fmt(c.kcal)} ккал · Б ${fmt(c.p, 1)} · Ж ${fmt(c.f, 1)} · У ${fmt(c.c, 1)}`;
       const n = el.querySelector(".snote");
       const kids = (r.kids || []).filter(k => k.on !== false);
-      n.textContent = [r.meal && r.meal !== meal ? "→ " + r.meal.toLowerCase() : "",
+      n.textContent = [!multi && r.meal && r.meal !== meal ? "→ " + r.meal.toLowerCase() : "",
         kids.length ? `${fmt(r.base)} г всего − ${kids.map(k => `${k.cands[k.fi].f.name.split(" ")[0].toLowerCase()} ${fmt(k.g)} г`).join(", ")}` : "",
         r.pcs ? `${fmt(r.pcs, 1)} × ${pcLabel(f)} ${fmt(f.pc)} г = ${fmt(r.g)} г` : "",
         r.mlab ? `${fmt(r.mn, 1)} × ${r.mlab} ≈ ${fmt(r.g)} г` : "",
@@ -959,17 +963,24 @@
     const sync = () => { saySettle(parsed.rows);
       $("sayRows").querySelectorAll("[data-i]").forEach(el => { const i = +el.dataset.i, inp = el.querySelector(".sg");
         if (inp !== document.activeElement) inp.value = valOf(parsed.rows[i]); upd(i); }); total(); };
+    const rowHtml = (r, i) => `<div class="srow" data-i="${i}">
+        <button class="sname" data-pick="${i}" aria-expanded="false" aria-label="Заменить продукт"><span></span><svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
+        <div class="spick" hidden><input class="search spq" type="search" placeholder="Найти в моих продуктах и блюдах" aria-label="Найти продукт для замены" autocomplete="off"><div class="splist"></div></div>
+        <div class="sline"><input class="sg" inputmode="decimal" value="${valOf(r)}" aria-label="Сколько"><div class="sunit"></div><span class="sres"></span><button class="sx" data-x="${i}" aria-label="Убрать">${X}</button></div>
+        <small class="snote" hidden></small></div>`;
     const draw = () => {
       const d = target(); $("sayDay").textContent = "Запишу в: " + dayLabel(d); $("sayDay").classList.toggle("other", d !== cur);
       const ms = new Set(parsed.rows.map(r => r.meal)); // во всей фразе один приём («на ужин …») — выбираем его
       if (ms.size === 1 && [...ms][0]){ meal = [...ms][0]; paintMeal(); }
+      // несколько приёмов — переключатель не нужен: каждая строка уже знает свой приём, показываем группами с суммой
+      multi = ms.size > 1; $("sayMeal").hidden = $("sayMealCap").hidden = multi;
+      const rowsHtml = multi
+        ? MEALS.filter(m => parsed.rows.some(r => r.meal === m)).map(m => `<div class="sgroup" data-gm="${m}"><b>${m}</b><span></span></div>`
+            + parsed.rows.map((r, i) => r.meal === m ? rowHtml(r, i) : "").join("")).join("")
+        : parsed.rows.map(rowHtml).join("");
       $("sayRows").innerHTML = (parsed.plan || []).map(x => x.miss ? `<div class="hint warnline">${esc(x.miss)}</div>` : `<div class="erow">${esc(x.text)}</div>`).join("")
         + (parsed.copyNote ? `<div class="hint ${parsed.copyEmpty ? "warnline" : ""}">${esc(parsed.copyNote)}</div>` : "")
-        + parsed.rows.map((r, i) => `<div class="srow" data-i="${i}">
-        <button class="sname" data-pick="${i}" aria-expanded="false" aria-label="Заменить продукт"><span></span><svg viewBox="0 0 24 24" class="ico" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
-        <div class="spick" hidden><input class="search spq" type="search" placeholder="Найти в моих продуктах и блюдах" aria-label="Найти продукт для замены" autocomplete="off"><div class="splist"></div></div>
-        <div class="sline"><input class="sg" inputmode="decimal" value="${valOf(r)}" aria-label="Сколько"><div class="sunit"></div><span class="sres"></span><button class="sx" data-x="${i}" aria-label="Убрать">${X}</button></div>
-        <small class="snote" hidden></small></div>`).join("")
+        + rowsHtml
         + (parsed.miss.length ? `<div class="hint warnline">Не нашёл ни в каталоге, ни в справочнике: ${esc(parsed.miss.join(", "))}. Добавь через «+» у приёма пищи.</div>` : "");
       parsed.rows.forEach((_, i) => upd(i)); total();
       grow(); // список мог сузить окно (полоса прокрутки) — подогнать высоту поля заново
